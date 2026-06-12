@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qwelio</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Qwelio</h1>
+      <div class="header-status">
+        <span id="calendar-status">Calendar: <em>not connected</em></span>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>Today</h2>
+        <div id="today-events">
+          <p class="placeholder">Loading today's events...</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>This Week</h2>
+        <div id="week-events">
+          <p class="placeholder">Loading week's events...</p>
+        </div>
+      </section>
+
+      <section class="panel chat-panel">
+        <h2>Chat</h2>
+        <div id="chat-messages" class="chat-messages"></div>
+        <form id="chat-form" class="chat-form">
+          <input type="text" id="chat-input" placeholder="Ask something..." autocomplete="off">
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const API = "http://localhost:8000/api";
+    const chatHistory = [];
+
+    async function loadToday() {
+      try {
+        const res = await fetch(`${API}/calendar/today`);
+        const data = await res.json();
+        const container = document.getElementById("today-events");
+        const status = document.getElementById("calendar-status");
+
+        if (data.auth_required) {
+          status.innerHTML = 'Calendar: <a href="' + data.auth_url + '" target="_blank">Connect</a>';
+          container.innerHTML = '<p class="placeholder">Connect your Google Calendar to see events.</p>';
+          return;
+        }
+
+        status.innerHTML = "Calendar: connected";
+        if (!data.events || data.events.length === 0) {
+          container.innerHTML = '<p class="placeholder">No events today.</p>';
+          return;
+        }
+
+        container.innerHTML = data.events.map(e => `
+          <div class="event">
+            <span class="event-time">${formatTime(e.start)}</span>
+            <span class="event-summary">${e.summary}</span>
+            ${e.location ? '<span class="event-location">' + e.location + '</span>' : ''}
+          </div>
+        `).join("");
+      } catch (err) {
+        document.getElementById("today-events").innerHTML =
+          '<p class="error">Failed to load today\'s events.</p>';
+      }
+    }
+
+    async function loadWeek() {
+      try {
+        const res = await fetch(`${API}/calendar/week`);
+        const data = await res.json();
+        const container = document.getElementById("week-events");
+
+        if (data.auth_required) {
+          container.innerHTML = '<p class="placeholder">Connect your Google Calendar to see events.</p>';
+          return;
+        }
+
+        if (!data.events || data.events.length === 0) {
+          container.innerHTML = '<p class="placeholder">No events this week.</p>';
+          return;
+        }
+
+        container.innerHTML = data.events.map(e => `
+          <div class="event">
+            <span class="event-date">${formatDate(e.start)}</span>
+            <span class="event-time">${formatTime(e.start)}</span>
+            <span class="event-summary">${e.summary}</span>
+          </div>
+        `).join("");
+      } catch (err) {
+        document.getElementById("week-events").innerHTML =
+          '<p class="error">Failed to load week\'s events.</p>';
+      }
+    }
+
+    function formatTime(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function formatDate(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    }
+
+    function addMessage(role, content) {
+      const container = document.getElementById("chat-messages");
+      const div = document.createElement("div");
+      div.className = "message " + role;
+      div.textContent = content;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    document.getElementById("chat-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("chat-input");
+      const text = input.value.trim();
+      if (!text) return;
+
+      input.value = "";
+      addMessage("user", text);
+      chatHistory.push({ role: "user", content: text });
+
+      try {
+        const res = await fetch(`${API}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: chatHistory }),
+        });
+        const data = await res.json();
+        addMessage("assistant", data.content);
+        chatHistory.push({ role: "assistant", content: data.content });
+      } catch (err) {
+        addMessage("system", "Failed to get response.");
+      }
+    });
+
+    loadToday();
+    loadWeek();
+    setInterval(loadToday, 60000);
+    setInterval(loadWeek, 300000);
+  </script>
+</body>
+</html>
