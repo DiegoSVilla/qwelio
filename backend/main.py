@@ -37,7 +37,7 @@ async def api_chat(req: ChatRequest):
 @app.get("/api/calendar/auth")
 async def calendar_auth():
     try:
-        service = get_service()
+        get_service()
         return {"error": "Already authenticated"}
     except NotAuthenticated as e:
         return {"auth_url": e.auth_url}

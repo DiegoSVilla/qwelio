@@ -5,28 +5,33 @@ import os
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-api_key = os.getenv("QWEN_API_KEY")
-if not api_key:
-    raise RuntimeError("QWEN_API_KEY not set")
-
-client = AsyncOpenAI(
-    base_url=os.getenv("QWEN_API_URL", "https://inference.beestorm.ai/v1"),
-    api_key=api_key,
-    timeout=30.0,
-    max_retries=2,
-)
-
-MODEL = os.getenv("MODEL_NAME", "google/gemma-4-12B-it-qat-w4a16-ct")
-
 
 class LLMError(Exception):
     pass
 
 
+def _get_client():
+    api_key = os.getenv("QWEN_API_KEY")
+    if not api_key:
+        raise RuntimeError("QWEN_API_KEY not set")
+    return AsyncOpenAI(
+        base_url=os.getenv("QWEN_API_URL", "https://inference.beestorm.ai/v1"),
+        api_key=api_key,
+        timeout=30.0,
+        max_retries=2,
+    )
+
+
+def _get_model():
+    return os.getenv("MODEL_NAME", "google/gemma-4-12B-it-qat-w4a16-ct")
+
+
 async def chat(messages: list[dict]) -> str:
+    client = _get_client()
+    model = _get_model()
     try:
         resp = await client.chat.completions.create(
-            model=MODEL,
+            model=model,
             messages=messages,
             temperature=0.6,
         )

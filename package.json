@@ -9,7 +9,11 @@
     "install:all": "cd frontend && npm install && cd ../backend && uv sync",
     "lint:python": "cd backend && uv run ruff check .",
     "lint:frontend": "cd frontend && npx eslint .",
-    "lint": "npm run lint:python && npm run lint:frontend"
+    "lint": "npm run lint:python && npm run lint:frontend",
+    "test:backend": "cd backend && uv run pytest -v",
+    "test:frontend": "cd frontend && npm test",
+    "test:integration": "node test/integration.test.js",
+    "test": "npm run test:backend && npm run test:frontend && npm run test:integration"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"
