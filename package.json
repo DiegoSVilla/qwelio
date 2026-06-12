@@ -1,0 +1,15 @@
+{
+  "name": "qwelio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:python\" \"npm run dev:node\" --names py,node --prefix-colors blue,magenta",
+    "dev:python": "cd backend && uv run uvicorn main:app --reload --port 8000",
+    "dev:node": "cd frontend && npm run dev",
+    "install:all": "cd frontend && npm install",
+    "lint": "cd frontend && npx eslint . 2>/dev/null; cd .. && cd backend && npx ruff check . 2>/dev/null"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
