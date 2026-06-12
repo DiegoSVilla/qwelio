@@ -6,8 +6,10 @@
     "dev": "concurrently \"npm run dev:python\" \"npm run dev:node\" --names py,node --prefix-colors blue,magenta",
     "dev:python": "cd backend && uv run uvicorn main:app --reload --port 8000",
     "dev:node": "cd frontend && npm run dev",
-    "install:all": "cd frontend && npm install",
-    "lint": "cd frontend && npx eslint . 2>/dev/null; cd .. && cd backend && npx ruff check . 2>/dev/null"
+    "install:all": "cd frontend && npm install && cd ../backend && uv sync",
+    "lint:python": "cd backend && uv run ruff check .",
+    "lint:frontend": "cd frontend && npx eslint .",
+    "lint": "npm run lint:python && npm run lint:frontend"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

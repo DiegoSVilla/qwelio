@@ -2,13 +2,19 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import json
 import pathlib
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 TOKEN_PATH = pathlib.Path(__file__).parent / ".calendar_token.json"
+
+
+class NotAuthenticated(Exception):
+    def __init__(self, auth_url: str):
+        self.auth_url = auth_url
+        super().__init__(f"Not authenticated. Visit: {auth_url}")
 
 
 def _save_token(credentials):
@@ -20,6 +26,7 @@ def _save_token(credentials):
         "client_secret": credentials.client_secret,
         "scopes": credentials.scopes,
     }))
+    TOKEN_PATH.chmod(0o600)
 
 
 def _load_credentials():
@@ -34,7 +41,13 @@ def _load_credentials():
     return None
 
 
+def _check_env():
+    if not os.getenv("GOOGLE_CLIENT_ID") or not os.getenv("GOOGLE_CLIENT_SECRET"):
+        raise RuntimeError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set")
+
+
 def _build_flow():
+    _check_env()
     return Flow.from_client_config(
         {
             "web": {
@@ -48,15 +61,32 @@ def _build_flow():
     )
 
 
+def _format_events(events):
+    formatted = []
+    for e in events:
+        start = e.get("start", {})
+        formatted.append({
+            "summary": e.get("summary", "No title"),
+            "start": start.get("dateTime") or start.get("date"),
+            "end": e.get("end", {}).get("dateTime"),
+            "location": e.get("location"),
+            "description": e.get("description"),
+        })
+    return formatted
+
+
 def get_service():
     creds = _load_credentials()
     if creds:
         return build("calendar", "v3", credentials=creds)
 
+    if not os.getenv("GOOGLE_CLIENT_ID") or not os.getenv("GOOGLE_CLIENT_SECRET"):
+        raise NotAuthenticated("Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env")
+
     flow = _build_flow()
     flow.redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
     auth_url, _ = flow.authorization_url(access_type="consent", prompt="consent")
-    return auth_url
+    raise NotAuthenticated(auth_url)
 
 
 def auth_flow(state):
@@ -67,56 +97,26 @@ def auth_flow(state):
     return build("calendar", "v3", credentials=flow.credentials)
 
 
-def list_events(service, days=7):
-    now = datetime.now().isoformat()
-    end = (datetime.now() + timedelta(days=days)).isoformat()
-
+def _fetch_events(service, time_min, time_max):
     events_result = service.events().list(
         calendarId="primary",
-        timeMin=now,
-        timeMax=end,
+        timeMin=time_min,
+        timeMax=time_max,
         maxResults=50,
         singleEvents=True,
         orderBy="startTime",
     ).execute()
+    return _format_events(events_result.get("items", []))
 
-    events = events_result.get("items", [])
-    formatted = []
-    for e in events:
-        start = e.get("start", {})
-        formatted.append({
-            "summary": e.get("summary", "No title"),
-            "start": start.get("dateTime") or start.get("date"),
-            "end": e.get("end", {}).get("dateTime"),
-            "location": e.get("location"),
-            "description": e.get("description"),
-        })
-    return formatted
+
+def list_events(service, days=7):
+    now = datetime.now(timezone.utc)
+    end = now + timedelta(days=days)
+    return _fetch_events(service, now.isoformat(), end.isoformat())
 
 
 def get_today_events(service):
-    now = datetime.now()
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    end = now.replace(hour=23, minute=59, second=59).isoformat()
-
-    events_result = service.events().list(
-        calendarId="primary",
-        timeMin=start,
-        timeMax=end,
-        maxResults=50,
-        singleEvents=True,
-        orderBy="startTime",
-    ).execute()
-
-    events = events_result.get("items", [])
-    formatted = []
-    for e in events:
-        start = e.get("start", {})
-        formatted.append({
-            "summary": e.get("summary", "No title"),
-            "start": start.get("dateTime") or start.get("date"),
-            "end": e.get("end", {}).get("dateTime"),
-            "location": e.get("location"),
-            "description": e.get("description"),
-        })
-    return formatted
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return _fetch_events(service, start.isoformat(), end.isoformat())

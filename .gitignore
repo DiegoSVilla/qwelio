@@ -11,10 +11,19 @@ wheels/
 
 # Node
 node_modules/
-frontend/node_modules/
 
 # Secrets
 .env
+
+# Calendar token
+backend/.calendar_token.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
 
 # IDE
 .idea/
