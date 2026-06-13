@@ -1,5 +1,8 @@
 # Issue #6: Configurable Inference Settings (max context, model, temperature)
 
+## Dependencies
+- **No dependencies** — this issue is self-contained and can be implemented independently
+
 ## Functional Requirements
 - Admin can configure LLM inference settings without code changes
 - Configurable: model name, temperature, max context turns, API timeout, max retries

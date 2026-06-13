@@ -94,10 +94,15 @@ async def get_current_time(user: User = Depends(get_current_user)):
         "business_hours": 9 <= local_now.hour < 17,
     }
 
+class TimezoneRequest(BaseModel):
+    timezone: str
+
 @app.put("/api/timezone")
 async def set_timezone(req: TimezoneRequest, user: User = Depends(get_current_user)):
+    """Set user's timezone. In-memory only — persists until server restart.
+    Full persistence requires #5 (conversation history DB) or a user settings store."""
     user.settings["timezone"] = req.timezone
-    return {"timezone": req.timezone}
+    return {"timezone": req.timezone, "note": "In-memory only, lost on restart"}
 ```
 
 ## Acceptance Criteria

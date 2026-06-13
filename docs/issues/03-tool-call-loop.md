@@ -21,10 +21,12 @@
 
 ### Tool Registry (`backend/tools.py`)
 ```python
+import json
 from pydantic import BaseModel
 from typing import Any, Callable
 import asyncio
 import inspect
+from llm import LLMError
 
 class ToolDefinition(BaseModel):
     name: str
@@ -46,7 +48,10 @@ class ToolRegistry:
 
     @classmethod
     async def execute(cls, name: str, arguments: dict) -> str:
-        handler = cls._handlers[name]
+        try:
+            handler = cls._handlers[name]
+        except KeyError:
+            raise LLMError(f"Unknown tool: {name}")
         try:
             result = handler(**arguments)
             if inspect.isawaitable(result):
@@ -54,8 +59,6 @@ class ToolRegistry:
             return json.dumps(result) if isinstance(result, dict) else str(result)
         except asyncio.TimeoutError:
             raise LLMError(f"Tool {name} timed out after 10s")
-        except KeyError:
-            raise LLMError(f"Unknown tool: {name}")
 ```
 
 ### Tool Definitions (registered at startup)
@@ -96,9 +99,14 @@ async def chat_with_tools(messages: list[dict], conversation_id: str | None = No
                 tool_name = tool_call.function.name
                 try:
                     arguments = json.loads(tool_call.function.arguments)
-                except json.JSONDecodeError:
-                    arguments = {}
-                    raise LLMError(f"Invalid JSON in tool arguments for {tool_name}")
+                except json.JSONDecodeError as e:
+                    result = f"Error: Invalid JSON in tool arguments for {tool_name}: {e}"
+                    working_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": result,
+                    })
+                    continue
 
                 try:
                     result = await ToolRegistry.execute(tool_name, arguments)

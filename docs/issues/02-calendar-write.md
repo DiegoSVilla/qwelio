@@ -37,9 +37,12 @@ async def create_event(req: EventCreateRequest, user: User = Depends(get_current
 async def edit_event(event_id: str, req: EventUpdateRequest, user: User = Depends(get_current_user)):
     """Partially update an existing event. Only non-None fields are updated."""
     service = get_service()
-    existing = service.events().get(calendarId="primary", eventId=event_id).execute()
-    if not existing:
-        raise HTTPException(404, f"Event {event_id} not found")
+    try:
+        existing = service.events().get(calendarId="primary", eventId=event_id).execute()
+    except googleapiclient.errors.HttpError as e:
+        if e.status_code == 404:
+            raise HTTPException(404, f"Event {event_id} not found")
+        raise
     for field, value in req.model_dump(exclude_none=True).items():
         existing[field] = value
     updated = service.events().update(calendarId="primary", eventId=event_id, body=existing).execute()

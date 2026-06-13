@@ -30,7 +30,7 @@
 ### Security
 - Session cookie: `HttpOnly`, `Secure` (if HTTPS), `SameSite=Strict`
 - Session secret: read from `.env` (`SESSION_SECRET`)
-- Rate limit login endpoint: max 5 attempts per minute per **session** (tracked via in-memory dict keyed by session ID, not IP — avoids issues behind proxies/load balancers)
+- Rate limit login endpoint: max 5 attempts per minute, keyed by **IP address** (with `X-Forwarded-For` support for proxied deployments). Unauthenticated users have no session yet, so IP-based limiting is the only viable pre-auth mechanism.
 - No password hashing needed for hardcoded credentials (not production-ready, documented as such)
 - OAuth callback state validation: the `state` parameter passed to `/api/calendar/callback` must be validated against the state generated during auth initiation to prevent CSRF attacks in the OAuth flow
 

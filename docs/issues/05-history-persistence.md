@@ -57,10 +57,14 @@ async def save_turn(user_id: str, role: str, content: str, tool_calls: list | No
         await conn.commit()
 
 async def get_history(user_id: str, limit: int = 20) -> list[dict]:
+    """Get last N conversation turns. Each turn = user msg + assistant response.
+    Queries user/assistant rows only (excludes tool calls/results from count),
+    then multiplies limit by 2 to get N complete turns.
+    """
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.execute(
-            "SELECT role, content, tool_calls, tool_call_id, turn_order FROM conversations WHERE user_id = ? ORDER BY turn_order DESC LIMIT ?",
-            (user_id, limit),
+            "SELECT role, content, tool_calls, tool_call_id, turn_order FROM conversations WHERE user_id = ? AND role IN ('user', 'assistant') ORDER BY turn_order DESC LIMIT ?",
+            (user_id, limit * 2),
         )
         rows = await cursor.fetchall()
     return [

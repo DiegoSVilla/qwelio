@@ -92,7 +92,7 @@ ToolRegistry.register(
             "location": {"type": "string", "description": "Search in location"},
         },
     },
-    handler=lambda **kwargs: filter_events_by_criteria(**kwargs),
+    handler=filter_events,  # The endpoint function itself, which accepts EventFilterRequest kwargs
 )
 
 ToolRegistry.register(

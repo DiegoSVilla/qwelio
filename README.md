@@ -60,7 +60,7 @@ QWEN_API_URL=https://your-api-endpoint/v1
 QWEN_API_KEY=your-api-key
 MODEL_NAME=google/gemma-4-12B-it-qat-w4a16-ct
 
-# Google Calendar (optional for readonly features)
+# Google Calendar (required for calendar features)
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/api/calendar/callback
