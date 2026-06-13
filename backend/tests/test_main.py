@@ -1,6 +1,6 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 import os
 
 
@@ -94,6 +94,32 @@ class TestCalendarNotAuthenticated:
         assert resp.status_code == 200
         data = resp.json()
         assert "auth_url" in data
+
+
+class TestCalendarAuthenticated:
+    @pytest.mark.asyncio
+    async def test_calendar_today_success(self, client):
+        mock_service = MagicMock()
+        mock_events = [{"summary": "Test Event", "start": {"dateTime": "2025-01-01T10:00:00Z"}}]
+
+        with patch("main.get_service", return_value=mock_service):
+            with patch("main.get_today_events", return_value=mock_events):
+                resp = await client.get("/api/calendar/today")
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["events"] == mock_events
+
+    @pytest.mark.asyncio
+    async def test_calendar_week_success(self, client):
+        mock_service = MagicMock()
+        mock_events = [{"summary": "Meeting", "start": {"dateTime": "2025-01-01T09:00:00Z"}}]
+
+        with patch("main.get_service", return_value=mock_service):
+            with patch("main.list_events", return_value=mock_events):
+                resp = await client.get("/api/calendar/week")
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["events"] == mock_events
 
 
 class TestCORS:

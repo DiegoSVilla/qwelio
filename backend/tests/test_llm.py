@@ -104,3 +104,19 @@ class TestChat:
                 messages=[{"role": "system", "content": "Be nice"}, {"role": "user", "content": "Hi"}],
                 temperature=0.6,
             )
+
+    @pytest.mark.asyncio
+    async def test_chat_api_status_error(self, mock_env):
+        from openai import APIStatusError
+
+        with patch("llm.AsyncOpenAI") as MockClient:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.status_code = 400
+            mock_client.chat.completions.create = AsyncMock(
+                side_effect=APIStatusError(message="Bad request", response=mock_response, body={})
+            )
+            MockClient.return_value = mock_client
+
+            with pytest.raises(LLMError, match="API error 400"):
+                await chat([{"role": "user", "content": "Hi"}])
