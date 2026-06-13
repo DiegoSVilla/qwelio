@@ -87,6 +87,8 @@ def parse_date_range(description: str) -> dict:
 ### Tool Registration (extends #3's tool registry)
 ```python
 # Standalone wrapper — not the FastAPI endpoint (Depends won't resolve from tool registry)
+from datetime import datetime, timedelta, timezone
+
 def tool_filter_events(time_min: str | None = None, time_max: str | None = None, days: int | None = None, keyword: str | None = None, location: str | None = None) -> dict:
     service = get_service()
     now = datetime.now(timezone.utc)

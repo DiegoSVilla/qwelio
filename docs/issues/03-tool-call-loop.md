@@ -68,7 +68,16 @@ class ToolRegistry:
 ```python
 def tool_create_event(summary: str, start: str, end: str, location: str | None = None, description: str | None = None) -> dict:
     service = get_service()
-    event = service.events().insert(calendarId="primary", body={"summary": summary, "start": {"dateTime": start}, "end": {"dateTime": end}, **{k: v for k, v in {"location": location, "description": description}.items() if v}}).execute()
+    body = {
+        "summary": summary,
+        "start": {"dateTime": start} if "T" in start else {"date": start},
+        "end": {"dateTime": end} if "T" in end else {"date": end},
+    }
+    if location:
+        body["location"] = location
+    if description:
+        body["description"] = description
+    event = service.events().insert(calendarId="primary", body=body).execute()
     return {"id": event["id"], "status": event.get("status", "confirmed")}
 
 def tool_list_events(time_min: str | None = None, time_max: str | None = None, days: int = 7) -> list[dict]:
@@ -109,10 +118,13 @@ async def chat_with_tools(messages: list[dict]) -> tuple[str, list[dict]]:
     working_messages = list(messages)
 
     for iteration in range(MAX_TOOL_ITERATIONS):
+        # Import settings from #6 — defaults to 0.6 if not configured
+        from llm import _get_settings
+        settings = _get_settings()
         resp = await client.chat.completions.create(
             model=model,
             messages=working_messages,
-            temperature=0.6,
+            temperature=settings.temperature,
             tools=tool_definitions,
         )
 

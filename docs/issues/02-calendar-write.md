@@ -33,6 +33,13 @@ async def create_event(req: EventCreateRequest, user: User = Depends(get_current
         service = get_service()
     except NotAuthenticated as e:
         return {"auth_required": True, "auth_url": e.auth_url}
+
+    # Duplicate detection: query existing events in the same time window with matching summary
+    existing_events = _fetch_events(service, req.start, req.end)
+    for ev in existing_events:
+        if ev.get("summary", "").lower() == req.summary.lower():
+            return {"error": "Duplicate event", "existing_id": ev["id"]}
+
     event = service.events().insert(calendarId="primary", body=req.to_gapi_dict()).execute()
     return {"id": event["id"], "status": event.get("status", "confirmed")}
 

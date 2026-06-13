@@ -32,8 +32,11 @@ from zoneinfo import ZoneInfo
 # Requires python-dateutil (add to pyproject.toml)
 from dateutil import parser as dateutil_parser
 
-def parse_datetime(iso_str: str) -> datetime:
-    """Parse ISO 8601 datetime string or date-only string to datetime."""
+def parse_datetime(iso_str: str) -> datetime | None:
+    """Parse ISO 8601 datetime string or date-only string to datetime.
+    Returns None if iso_str is None or empty."""
+    if not iso_str:
+        return None
     return dateutil_parser.parse(iso_str, default=datetime.now(timezone.utc))
 
 def get_user_now(user_timezone: str = "America/New_York"):

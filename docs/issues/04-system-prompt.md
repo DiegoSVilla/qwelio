@@ -3,7 +3,7 @@
 ## Dependencies
 - **Requires #1 (Authentication)** — endpoint uses `Depends(get_current_user)`
 - **Requires #3 (Tool call loop)** — tool definitions are injected into the system prompt
-- **Extended by #8 (Time-aware prompt)** — timezone handling is moved to `ZoneInfo` in #8; this spec uses a placeholder approach
+- **Extended by #8 (Time-aware prompt)** — #8 adds user-configurable timezone, `USER_TIMEZONE` setting, and timezone-aware event formatting; this spec already uses `ZoneInfo` for UTC→local conversion
 
 ## Functional Requirements
 - Each LLM turn receives a system prompt enriched with:

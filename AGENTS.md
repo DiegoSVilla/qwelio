@@ -39,7 +39,7 @@ Qwelio is an AI-powered calendar assistant. The LLM agent is **time-aware** and 
 - OAuth credentials in `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
 - Tokens stored in `backend/.calendar_token.json` (gitignored, chmod 0600)
 - `NotAuthenticated` exception — don't use dual return types
-- Currently **readonly** (`calendar.readonly` scope) — write operations pending
+- Currently **readonly** (`calendar.readonly` scope) — write operations specified in #2
 
 ## Agent Flow (Tool Call Loop)
 

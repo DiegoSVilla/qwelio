@@ -55,7 +55,7 @@ async def save_turn(user_id: str, role: str, content: str, tool_calls: list | No
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "INSERT INTO conversations (user_id, role, content, tool_calls, tool_call_id, turn_order) VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, role, content, json.dumps(tool_calls), tool_call_id, turn_order),
+            (user_id, role, content, json.dumps(tool_calls) if tool_calls else None, tool_call_id, turn_order),
         )
         await conn.commit()
 
@@ -69,19 +69,20 @@ async def save_turns(turns: list[tuple]) -> None:
         )
         await conn.commit()
 
-async def get_history(user_id: str, limit: int = 20) -> list[dict]:
-    """Get last N conversation turns for LLM context. Each turn = user msg + assistant response.
+async def get_history(user_id: str, limit: int = 20, include_tools: bool = False) -> list[dict]:
+    """Get last N conversation turns. Each turn = user msg + assistant response.
     Queries user/assistant rows only (excludes tool calls/results from count),
     then multiplies limit by 2 to get N complete turns.
 
-    Note: Tool calls/results are stored in DB (saved by #5 endpoint) but excluded from
-    this query. They are available via `tool_calls`/`tool_call_id` columns if needed
-    for full trace reconstruction.
+    When include_tools=True, also returns tool call and tool result rows.
+    Default (False) returns only user/assistant messages for the frontend chat panel.
+    """
+    roles = ("user", "assistant", "tool") if include_tools else ("user", "assistant")
     """
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.execute(
-            "SELECT role, content, tool_calls, tool_call_id, turn_order FROM conversations WHERE user_id = ? AND role IN ('user', 'assistant') ORDER BY turn_order DESC LIMIT ?",
-            (user_id, limit * 2),
+            "SELECT role, content, tool_calls, tool_call_id, turn_order FROM conversations WHERE user_id = ? AND role IN (?, ?, ?) ORDER BY turn_order DESC LIMIT ?",
+            (user_id, *roles, limit * 2),
         )
         rows = await cursor.fetchall()
     return [
@@ -93,6 +94,13 @@ async def get_history(user_id: str, limit: int = 20) -> list[dict]:
         }
         for r in reversed(rows)
     ]
+
+
+"""Note on turn_order semantics: A single user turn with tool calls produces
+multiple rows (user msg → assistant with tool_calls → tool results → final assistant).
+turn_order increments per row, so one turn may span 4+ sequential values.
+get_history with include_tools=False returns only user/assistant rows, which
+gives clean turn boundaries for the frontend chat panel and LLM context."""
 
 async def clear_history(user_id: str):
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -119,23 +127,24 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
         # Run tool loop — returns (content, tool_trace)
         content, tool_trace = await chat_with_tools(messages)
 
-        # Persist new turns (including tool calls and results)
+        # Persist new turns (including tool calls and results) via batch insert
         turn_order = max([h.get("turn_order", 0) for h in history], default=0) + 1
+        turns = []
         for msg in req.messages:
-            await save_turn(user.id, msg.role, msg.content, None, None, turn_order)
+            turns.append((user.id, msg.role, msg.content, None, None, turn_order))
             turn_order += 1
-        # Persist tool calls and results from the trace
         for trace_msg in tool_trace:
-            await save_turn(
+            turns.append((
                 user.id,
                 trace_msg["role"],
                 trace_msg.get("content"),
                 trace_msg.get("tool_calls"),
                 trace_msg.get("tool_call_id"),
                 turn_order,
-            )
+            ))
             turn_order += 1
-        await save_turn(user.id, "assistant", content, None, None, turn_order)
+        turns.append((user.id, "assistant", content, None, None, turn_order))
+        await save_turns(turns)
 
         return {"content": content}
     except NotAuthenticated as e:
