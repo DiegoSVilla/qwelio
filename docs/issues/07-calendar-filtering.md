@@ -64,6 +64,7 @@ async def filter_events(req: EventFilterRequest, user: User = Depends(get_curren
 ```python
 from datetime import datetime, timedelta, timezone
 from dateutil import parser as dateutil_parser
+from dateutil.parser import ParserError
 from llm import LLMError
 
 def parse_date_range(description: str) -> dict:
@@ -77,9 +78,9 @@ def parse_date_range(description: str) -> dict:
         # For range-like inputs ("next week"), dateutil may return mid-range.
         # We normalize to a day-range for single dates, or a week-range for week-like inputs.
         if "week" in description.lower():
-           Monday = dt - timedelta(days=dt.weekday())
-            day_start = Monday.replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end = (Monday + timedelta(days=6)).replace(hour=23, minute=59, second=59)
+            monday = dt - timedelta(days=dt.weekday())
+            day_start = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = (monday + timedelta(days=6)).replace(hour=23, minute=59, second=59)
         elif "month" in description.lower():
             day_start = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             if dt.month == 12:
@@ -90,7 +91,7 @@ def parse_date_range(description: str) -> dict:
             day_start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
             day_end = dt.replace(hour=23, minute=59, second=59)
         return {"time_min": day_start.isoformat(), "time_max": day_end.isoformat()}
-    except ValueError as e:
+    except ParserError as e:
         raise LLMError(f"Could not parse date: {description}")
 ```
 

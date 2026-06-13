@@ -80,6 +80,7 @@ def _format_events(events, user_timezone: str = "America/New_York"):
     formatted = []
     for e in events:
         start_raw = e.get("start", {})
+        end_raw = e.get("end", {})
         raw = start_raw.get("dateTime") or start_raw.get("date")
         start_dt = parse_datetime(raw) if raw else None
         local_start = start_dt.astimezone(tz) if start_dt else None
