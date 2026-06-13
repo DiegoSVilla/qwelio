@@ -59,6 +59,16 @@ async def save_turn(user_id: str, role: str, content: str, tool_calls: list | No
         )
         await conn.commit()
 
+async def save_turns(turns: list[tuple]) -> None:
+    """Batch insert multiple turns in a single transaction. More efficient than
+    calling save_turn repeatedly in a loop (avoids N separate connections)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.executemany(
+            "INSERT INTO conversations (user_id, role, content, tool_calls, tool_call_id, turn_order) VALUES (?, ?, ?, ?, ?, ?)",
+            turns,
+        )
+        await conn.commit()
+
 async def get_history(user_id: str, limit: int = 20) -> list[dict]:
     """Get last N conversation turns. Each turn = user msg + assistant response.
     Queries user/assistant rows only (excludes tool calls/results from count),
@@ -97,12 +107,13 @@ async def cleanup_old_history(retention_days: int = 30):
 ```python
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
-    # Load history from DB
-    history = await get_history(user.id, limit=MAX_CONTEXT_TURNS)
-    messages = [{"role": "system", "content": build_system_prompt(...)}] + history + req.messages
+    try:
+        # Load history from DB
+        history = await get_history(user.id, limit=MAX_CONTEXT_TURNS)
+        messages = [{"role": "system", "content": build_system_prompt(...)}] + history + req.messages
 
-    # Run tool loop — returns (content, tool_trace)
-    content, tool_trace = await chat_with_tools(messages)
+        # Run tool loop — returns (content, tool_trace)
+        content, tool_trace = await chat_with_tools(messages)
 
     # Persist new turns (including tool calls and results)
     turn_order = max([h.get("turn_order", 0) for h in history], default=0) + 1
@@ -123,6 +134,8 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
     await save_turn(user.id, "assistant", content, None, None, turn_order)
 
     return {"content": content}
+except LLMError as e:
+    return {"error": str(e)}
 
 @app.get("/api/conversations")
 async def get_conversations(limit: int = 50, user: User = Depends(get_current_user)):

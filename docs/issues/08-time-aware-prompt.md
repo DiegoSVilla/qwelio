@@ -29,6 +29,7 @@ self.user_timezone = os.getenv("USER_TIMEZONE", "America/New_York")
 ```python
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+# Requires python-dateutil (add to pyproject.toml)
 from dateutil import parser as dateutil_parser
 
 def parse_datetime(iso_str: str) -> datetime:

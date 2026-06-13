@@ -1,5 +1,8 @@
 # Issue #1: User Authentication (login/logout/session)
 
+## Dependencies
+- **No dependencies** — root feature; all other issues depend on this
+
 ## Functional Requirements
 - Users must log in before accessing the application
 - Login page with username/password fields

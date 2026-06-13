@@ -29,20 +29,28 @@
 @app.post("/api/calendar/events")
 async def create_event(req: EventCreateRequest, user: User = Depends(get_current_user)):
     """Create a calendar event."""
-    service = get_service()
+    try:
+        service = get_service()
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
     event = service.events().insert(calendarId="primary", body=req.to_gapi_dict()).execute()
     return {"id": event["id"], "status": event.get("status", "confirmed")}
 
 @app.patch("/api/calendar/events/{event_id}")
 async def edit_event(event_id: str, req: EventUpdateRequest, user: User = Depends(get_current_user)):
     """Partially update an existing event. Only non-None fields are updated."""
-    service = get_service()
+    try:
+        service = get_service()
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
     try:
         existing = service.events().get(calendarId="primary", eventId=event_id).execute()
     except googleapiclient.errors.HttpError as e:
         if e.status_code == 404:
             raise HTTPException(404, f"Event {event_id} not found")
         raise
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
     for field, value in req.model_dump(exclude_none=True).items():
         existing[field] = value
     updated = service.events().update(calendarId="primary", eventId=event_id, body=existing).execute()

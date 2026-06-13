@@ -65,7 +65,7 @@ GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/api/calendar/callback
 
-# Authentication (optional, defaults to random)
+# Authentication (required — random default invalidates sessions on restart)
 SESSION_SECRET=your-session-secret
 
 # Inference settings (optional, defaults shown)

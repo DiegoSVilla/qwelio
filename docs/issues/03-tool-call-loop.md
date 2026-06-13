@@ -91,7 +91,7 @@ def tool_list_events(time_min: str | None = None, time_max: str | None = None, d
 ```python
 MAX_TOOL_ITERATIONS = 5
 
-async def chat_with_tools(messages: list[dict], conversation_id: str | None = None) -> tuple[str, list[dict]]:
+async def chat_with_tools(messages: list[dict]) -> tuple[str, list[dict]]:
     """Execute the tool call loop. Returns (final_content, tool_trace).
     tool_trace contains all tool call and tool result messages for persistence (#5).
     Never mutates the input messages list.
