@@ -11,6 +11,7 @@ dependencies = [
     "google-auth-httplib2",
     "google-auth-oauthlib",
     "python-dotenv",
+    "itsdangerous",
 ]
 
 [project.optional-dependencies]

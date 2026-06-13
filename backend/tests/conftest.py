@@ -5,6 +5,13 @@ import importlib
 from unittest.mock import patch, MagicMock
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    import auth
+    auth.reset_rate_limiter()
+    yield
+
+
 @pytest.fixture
 def token_file(tmp_path):
     """Create a clean token file for tests that need to load credentials."""

@@ -2,6 +2,25 @@ const API = "http://localhost:8000/api";
 const chatHistory = [];
 let chatLoading = false;
 
+async function checkAuth() {
+  try {
+    const res = await fetch(`${API}/auth/me`, { credentials: "include" });
+    if (!res.ok) {
+      window.location.href = "/login.html";
+      return false;
+    }
+    return true;
+  } catch {
+    window.location.href = "/login.html";
+    return false;
+  }
+}
+
+async function logout() {
+  await fetch(`${API}/auth/logout`, { method: "POST", credentials: "include" });
+  window.location.href = "/login.html";
+}
+
 function createEl(tag, className, text) {
   const el = document.createElement(tag);
   if (className) el.className = className;
@@ -51,7 +70,7 @@ function setPlaceholder(container, text) {
 
 async function loadToday() {
   try {
-    const res = await fetch(`${API}/calendar/today`);
+    const res = await fetch(`${API}/calendar/today`, { credentials: "include" });
     const data = await res.json();
     const container = document.getElementById("today-events");
     const status = document.getElementById("calendar-status");
@@ -88,7 +107,7 @@ async function loadToday() {
 
 async function loadWeek() {
   try {
-    const res = await fetch(`${API}/calendar/week`);
+    const res = await fetch(`${API}/calendar/week`, { credentials: "include" });
     const data = await res.json();
     const container = document.getElementById("week-events");
 
@@ -137,6 +156,7 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
     const res = await fetch(`${API}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ messages: chatHistory.slice(-20) }),
     });
     const data = await res.json();
@@ -154,7 +174,11 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
   }
 });
 
-loadToday();
-loadWeek();
-setInterval(loadToday, 60000);
-setInterval(loadWeek, 300000);
+document.getElementById("logout-btn").addEventListener("click", logout);
+
+if (await checkAuth()) {
+  loadToday();
+  loadWeek();
+  setInterval(loadToday, 60000);
+  setInterval(loadWeek, 300000);
+}
