@@ -50,6 +50,20 @@ def google_env_setup(tmp_path):
 
 
 @pytest.fixture
+def e2e_test_credentials():
+    """Return E2E test account credentials from environment.
+
+    These are dedicated test account credentials, not a real user account.
+    Used only by integration/E2E tests to verify OAuth + Calendar flow end-to-end.
+    """
+    account = os.environ.get("E2E_TEST_GOOGLE_ACCOUNT")
+    password = os.environ.get("E2E_TEST_GOOGLE_PASSWORD")
+    if not account or not password:
+        pytest.skip("E2E_TEST_GOOGLE_ACCOUNT/E2E_TEST_GOOGLE_PASSWORD not set")
+    return {"account": account, "password": password}
+
+
+@pytest.fixture
 def mock_google_service():
     """Create a mock Google Calendar service."""
     service = MagicMock()
