@@ -110,7 +110,8 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
         # Prepend system message
         messages = [{"role": "system", "content": system_prompt}] + req.messages
 
-        content = await chat_with_tools(messages)
+        content, tool_trace = await chat_with_tools(messages)
+        # Full persistence of tool_trace is handled in #5
         return {"content": content}
     except NotAuthenticated as e:
         return {"auth_required": True, "auth_url": e.auth_url}

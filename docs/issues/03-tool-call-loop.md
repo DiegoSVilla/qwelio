@@ -89,6 +89,10 @@ def tool_list_events(time_min: str | None = None, time_max: str | None = None, d
 
 ### Modified Chat Loop (`backend/llm.py`)
 ```python
+import json
+import asyncio
+import inspect
+
 MAX_TOOL_ITERATIONS = 5
 
 async def chat_with_tools(messages: list[dict]) -> tuple[str, list[dict]]:

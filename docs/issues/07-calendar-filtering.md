@@ -21,6 +21,8 @@
 
 ### New Endpoint (`backend/main.py`)
 ```python
+from datetime import datetime, timedelta, timezone
+
 class EventFilterRequest(BaseModel):
     time_min: str | None = None      # ISO 8601 start
     time_max: str | None = None      # ISO 8601 end
@@ -62,6 +64,7 @@ async def filter_events(req: EventFilterRequest, user: User = Depends(get_curren
 ```python
 from datetime import datetime, timedelta, timezone
 from dateutil import parser as dateutil_parser
+from llm import LLMError
 
 def parse_date_range(description: str) -> dict:
     """Parse natural language date description to ISO 8601 range.

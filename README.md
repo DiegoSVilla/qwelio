@@ -28,7 +28,7 @@ npm run install:all
 
 # Configure .env (create manually)
 # Required: QWEN_API_URL, QWEN_API_KEY, MODEL_NAME
-# Optional: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
+# Required for calendar features: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
 
 # Run both servers
 npm run dev

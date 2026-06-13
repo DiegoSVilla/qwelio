@@ -70,9 +70,13 @@ async def save_turns(turns: list[tuple]) -> None:
         await conn.commit()
 
 async def get_history(user_id: str, limit: int = 20) -> list[dict]:
-    """Get last N conversation turns. Each turn = user msg + assistant response.
+    """Get last N conversation turns for LLM context. Each turn = user msg + assistant response.
     Queries user/assistant rows only (excludes tool calls/results from count),
     then multiplies limit by 2 to get N complete turns.
+
+    Note: Tool calls/results are stored in DB (saved by #5 endpoint) but excluded from
+    this query. They are available via `tool_calls`/`tool_call_id` columns if needed
+    for full trace reconstruction.
     """
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.execute(
@@ -115,27 +119,29 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
         # Run tool loop — returns (content, tool_trace)
         content, tool_trace = await chat_with_tools(messages)
 
-    # Persist new turns (including tool calls and results)
-    turn_order = max([h.get("turn_order", 0) for h in history], default=0) + 1
-    for msg in req.messages:
-        await save_turn(user.id, msg.role, msg.content, None, None, turn_order)
-        turn_order += 1
-    # Persist tool calls and results from the trace
-    for trace_msg in tool_trace:
-        await save_turn(
-            user.id,
-            trace_msg["role"],
-            trace_msg.get("content"),
-            trace_msg.get("tool_calls"),
-            trace_msg.get("tool_call_id"),
-            turn_order,
-        )
-        turn_order += 1
-    await save_turn(user.id, "assistant", content, None, None, turn_order)
+        # Persist new turns (including tool calls and results)
+        turn_order = max([h.get("turn_order", 0) for h in history], default=0) + 1
+        for msg in req.messages:
+            await save_turn(user.id, msg.role, msg.content, None, None, turn_order)
+            turn_order += 1
+        # Persist tool calls and results from the trace
+        for trace_msg in tool_trace:
+            await save_turn(
+                user.id,
+                trace_msg["role"],
+                trace_msg.get("content"),
+                trace_msg.get("tool_calls"),
+                trace_msg.get("tool_call_id"),
+                turn_order,
+            )
+            turn_order += 1
+        await save_turn(user.id, "assistant", content, None, None, turn_order)
 
-    return {"content": content}
-except LLMError as e:
-    return {"error": str(e)}
+        return {"content": content}
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
+    except LLMError as e:
+        return {"error": str(e)}
 
 @app.get("/api/conversations")
 async def get_conversations(limit: int = 50, user: User = Depends(get_current_user)):
