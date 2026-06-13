@@ -53,9 +53,12 @@ class ToolRegistry:
         except KeyError:
             raise LLMError(f"Unknown tool: {name}")
         try:
-            result = handler(**arguments)
-            if inspect.isawaitable(result):
-                result = await asyncio.wait_for(result, timeout=10.0)
+            # Always wrap in asyncio.to_thread for sync handlers, or await directly for async
+            if inspect.iscoroutinefunction(handler):
+                coro = handler(**arguments)
+            else:
+                coro = asyncio.to_thread(handler, **arguments)
+            result = await asyncio.wait_for(coro, timeout=10.0)
             return json.dumps(result) if isinstance(result, dict) else str(result)
         except asyncio.TimeoutError:
             raise LLMError(f"Tool {name} timed out after 10s")
@@ -114,13 +117,14 @@ async def chat_with_tools(messages: list[dict]) -> tuple[str, list[dict]]:
     tool_definitions = ToolRegistry.get_definitions()
     tool_trace = []  # Collected tool messages for persistence
 
+    # Import settings from #6 — defaults to 0.6 if not configured
+    from llm import _get_settings
+    settings = _get_settings()
+
     # Work on a copy to avoid mutating the caller's messages (which may be persisted history from #5)
     working_messages = list(messages)
 
     for iteration in range(MAX_TOOL_ITERATIONS):
-        # Import settings from #6 — defaults to 0.6 if not configured
-        from llm import _get_settings
-        settings = _get_settings()
         resp = await client.chat.completions.create(
             model=model,
             messages=working_messages,
@@ -185,7 +189,7 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
 - Tool execution timeout: 10s per call via `asyncio.wait_for`
 - Parameter validation via Pydantic before tool execution
 - Only registered tools can be called — unknown tool name → error message injected
-- Rate limit: 10 tool calls per minute per user (session-based)
+- Rate limit: 10 tool calls per minute per user — tracked via in-memory dict keyed by user.id, with sliding-window counter that resets after 60s
 - Working copy of messages prevents state leakage into persisted conversation history
 
 ## Acceptance Criteria

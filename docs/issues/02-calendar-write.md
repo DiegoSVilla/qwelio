@@ -56,8 +56,6 @@ async def edit_event(event_id: str, req: EventUpdateRequest, user: User = Depend
         if e.status_code == 404:
             raise HTTPException(404, f"Event {event_id} not found")
         raise
-    except NotAuthenticated as e:
-        return {"auth_required": True, "auth_url": e.auth_url}
     for field, value in req.model_dump(exclude_none=True).items():
         existing[field] = value
     updated = service.events().update(calendarId="primary", eventId=event_id, body=existing).execute()

@@ -78,10 +78,10 @@ async def get_history(user_id: str, limit: int = 20, include_tools: bool = False
     Default (False) returns only user/assistant messages for the frontend chat panel.
     """
     roles = ("user", "assistant", "tool") if include_tools else ("user", "assistant")
-    """
+    role_placeholders = ", ".join("?" for _ in roles)
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.execute(
-            "SELECT role, content, tool_calls, tool_call_id, turn_order FROM conversations WHERE user_id = ? AND role IN (?, ?, ?) ORDER BY turn_order DESC LIMIT ?",
+            f"SELECT role, content, tool_calls, tool_call_id, turn_order FROM conversations WHERE user_id = ? AND role IN ({role_placeholders}) ORDER BY turn_order DESC LIMIT ?",
             (user_id, *roles, limit * 2),
         )
         rows = await cursor.fetchall()

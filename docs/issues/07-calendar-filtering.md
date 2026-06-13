@@ -74,8 +74,21 @@ def parse_date_range(description: str) -> dict:
     """
     try:
         dt = dateutil_parser.parse(description, default=datetime.now(timezone.utc))
-        day_start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = dt.replace(hour=23, minute=59, second=59)
+        # For range-like inputs ("next week"), dateutil may return mid-range.
+        # We normalize to a day-range for single dates, or a week-range for week-like inputs.
+        if "week" in description.lower():
+           Monday = dt - timedelta(days=dt.weekday())
+            day_start = Monday.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = (Monday + timedelta(days=6)).replace(hour=23, minute=59, second=59)
+        elif "month" in description.lower():
+            day_start = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if dt.month == 12:
+                day_end = dt.replace(month=1, day=1, year=dt.year+1) - timedelta(seconds=1)
+            else:
+                day_end = dt.replace(month=dt.month+1, day=1) - timedelta(seconds=1)
+        else:
+            day_start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = dt.replace(hour=23, minute=59, second=59)
         return {"time_min": day_start.isoformat(), "time_max": day_end.isoformat()}
     except ValueError as e:
         raise LLMError(f"Could not parse date: {description}")
@@ -87,8 +100,6 @@ def parse_date_range(description: str) -> dict:
 ### Tool Registration (extends #3's tool registry)
 ```python
 # Standalone wrapper — not the FastAPI endpoint (Depends won't resolve from tool registry)
-from datetime import datetime, timedelta, timezone
-
 def tool_filter_events(time_min: str | None = None, time_max: str | None = None, days: int | None = None, keyword: str | None = None, location: str | None = None) -> dict:
     service = get_service()
     now = datetime.now(timezone.utc)

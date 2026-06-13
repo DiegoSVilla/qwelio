@@ -23,6 +23,17 @@
 - Add `get_current_user` dependency — FastAPI `Depends()` that checks session cookie, raises `HTTPException(401)` if missing/invalid
 - Apply dependency to all `/api/*` routes except auth/callback
 - Use `starlette.middleware.sessions.SessionMiddleware` for server-side sessions with signed cookies
+- Define `User` model (used by all endpoints via `Depends(get_current_user)`):
+```python
+from pydantic import BaseModel
+from typing import Any
+
+class User(BaseModel):
+    id: str
+    username: str
+    settings: dict[str, Any] = {}
+```
+- `get_current_user` extracts session data and returns a `User` instance, or raises `HTTPException(401)`
 
 ### Frontend (`frontend/public/`)
 - Add `login.html` — simple login form

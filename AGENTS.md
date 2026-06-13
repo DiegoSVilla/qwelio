@@ -38,7 +38,7 @@ Qwelio is an AI-powered calendar assistant. The LLM agent is **time-aware** and 
 - OAuth flow: navigate to `/api/calendar/auth`, callback at `/api/calendar/callback`
 - OAuth credentials in `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
 - Tokens stored in `backend/.calendar_token.json` (gitignored, chmod 0600)
-- `NotAuthenticated` exception — don't use dual return types
+- `NotAuthenticated` exception — caught at endpoint level to return `{"auth_required": True, "auth_url": ...}` instead of 401, so unauthenticated clients get a friendly redirect hint
 - Currently **readonly** (`calendar.readonly` scope) — write operations specified in #2
 
 ## Agent Flow (Tool Call Loop)
@@ -89,7 +89,7 @@ Persist conversation turn (user msg + assistant response + tool calls)
 | `edit_event` | Update an existing event | `PATCH /api/calendar/events/{id}` |
 | `delete_event` | Remove an event | `DELETE /api/calendar/events/{id}` |
 | `list_events` | List events by date range | `GET /api/calendar/events?start=&end=` |
-| `filter_events` | Filter by keyword, location, etc. | `GET /api/calendar/events?filter=` |
+| `filter_events` | Filter by keyword, location, etc. | `POST /api/calendar/filter` |
 | `get_today_events` | Today's events | `GET /api/calendar/today` (exists) |
 | `get_week_events` | Next 7 days | `GET /api/calendar/week` (exists) |
 

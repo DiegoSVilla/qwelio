@@ -88,7 +88,7 @@ def _format_events(events, user_timezone: str = "America/New_York"):
             "summary": e.get("summary", "No title"),
             "start": start_raw.get("dateTime") or start_raw.get("date"),
             "start_local": local_start.strftime("%Y-%m-%d %H:%M") if local_start else None,
-            "end": ...,
+            "end": end_raw.get("dateTime") or end_raw.get("date"),
             "location": e.get("location"),
             "description": e.get("description"),
         })
