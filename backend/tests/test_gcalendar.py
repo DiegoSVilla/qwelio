@@ -23,12 +23,15 @@ class TestFormatEvents:
             "start": {"dateTime": "2025-01-01T10:00:00Z"},
             "end": {"dateTime": "2025-01-01T11:00:00Z"},
             "location": "Room A",
+            "description": "Discuss project",
         }]
         result = _format_events(events)
         assert len(result) == 1
         assert result[0]["summary"] == "Team meeting"
         assert result[0]["start"] == "2025-01-01T10:00:00Z"
+        assert result[0]["end"] == "2025-01-01T11:00:00Z"
         assert result[0]["location"] == "Room A"
+        assert result[0]["description"] == "Discuss project"
 
     def test_format_all_day_event(self):
         events = [{
@@ -38,14 +41,6 @@ class TestFormatEvents:
         }]
         result = _format_events(events)
         assert result[0]["start"] == "2025-01-01"
-
-    def test_format_all_day_event_end(self):
-        events = [{
-            "summary": "Holiday",
-            "start": {"date": "2025-01-01"},
-            "end": {"date": "2025-01-02"},
-        }]
-        result = _format_events(events)
         assert result[0]["end"] == "2025-01-02"
 
     def test_format_missing_fields(self):
@@ -53,6 +48,9 @@ class TestFormatEvents:
         result = _format_events(events)
         assert result[0]["summary"] == "No title"
         assert result[0]["start"] is None
+        assert result[0]["end"] is None
+        assert result[0]["location"] is None
+        assert result[0]["description"] is None
 
     def test_format_empty_list(self):
         assert _format_events([]) == []
@@ -197,9 +195,8 @@ class TestAuthFlow:
 class TestLoadCredentials:
     def test_load_credentials_returns_none_when_no_file(self, clean_google_env):
         clean_google_env.unlink()
-        with patch.dict(os.environ, {}, clear=True):
-            creds = _load_credentials()
-            assert creds is None
+        creds = _load_credentials()
+        assert creds is None
 
     def test_load_credentials_returns_creds_when_file_exists(self, token_file):
         with patch("gcalendar.TOKEN_PATH", token_file):
@@ -219,7 +216,8 @@ class TestLoadCredentials:
                 MockCreds.return_value = mock_creds
                 with patch("gcalendar.Request"):
                     with patch("gcalendar._save_token") as mock_save:
-                        _load_credentials()
+                        creds = _load_credentials()
+                        assert creds is mock_creds
                         mock_creds.refresh.assert_called_once()
                         mock_save.assert_called_once()
 
@@ -231,7 +229,7 @@ class TestEventsUseUTC:
         list_events(mock_google_service, days=7)
         call_args = mock_google_service.events().list.call_args
         time_min = call_args.kwargs["timeMin"]
-        assert "+00:00" in time_min or "Z" in time_min or "+00" in time_min
+        assert time_min.endswith("+00:00")
 
     def test_get_today_events_uses_utc_time(self, mock_google_service):
         mock_google_service.events().list().execute.return_value = {"items": []}
@@ -239,4 +237,4 @@ class TestEventsUseUTC:
         get_today_events(mock_google_service)
         call_args = mock_google_service.events().list.call_args
         time_min = call_args.kwargs["timeMin"]
-        assert "+00:00" in time_min or "Z" in time_min or "+00" in time_min
+        assert time_min.endswith("+00:00")

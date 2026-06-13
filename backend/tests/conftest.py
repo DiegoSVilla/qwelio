@@ -23,24 +23,14 @@ def token_file(tmp_path):
 @pytest.fixture
 def mock_credentials(tmp_path):
     """Create mock credentials object for testing."""
-    creds_data = {
-        "token": "test-token",
-        "refresh_token": "test-refresh",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "client_id": "test-id",
-        "client_secret": "test-secret",
-        "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
-    }
     mock = MagicMock()
-    for k, v in creds_data.items():
-        setattr(mock, k, v)
-    mock.valid = True
     mock.token = "test-token"
     mock.refresh_token = "test-refresh"
     mock.token_uri = "https://oauth2.googleapis.com/token"
     mock.client_id = "test-id"
     mock.client_secret = "test-secret"
     mock.scopes = ["https://www.googleapis.com/auth/calendar.readonly"]
+    mock.valid = True
     return mock
 
 
