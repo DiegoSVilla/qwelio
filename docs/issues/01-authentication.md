@@ -42,6 +42,6 @@
 - [ ] `GET /api/calendar/today` with valid session → 200
 - [ ] `POST /api/auth/logout` → clears session, redirects to login
 - [ ] Session persists across browser reload
-- [ ] Login rate limited to 5 attempts/minute per session
+- [ ] Login rate limited to 5 attempts/minute per IP address
 - [ ] OAuth callback validates state parameter against generated state
 - [ ] Tests: login success, failure, rate limit, session expiry, protected routes, state validation

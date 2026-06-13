@@ -60,6 +60,7 @@ async def filter_events(req: EventFilterRequest, user: User = Depends(get_curren
 - Use `dateutil.parser` for parsing relative dates: "next Tuesday", "3pm tomorrow"
 - Register as a tool: `parse_date_range(description: str) → {time_min, time_max}`
 ```python
+from datetime import datetime, timedelta, timezone
 from dateutil import parser as dateutil_parser
 
 def parse_date_range(description: str) -> dict:
@@ -77,8 +78,32 @@ def parse_date_range(description: str) -> dict:
         raise LLMError(f"Could not parse date: {description}")
 ```
 
+### New Dependencies
+- `python-dateutil` — add to `backend/pyproject.toml` `[project.dependencies]`
+
 ### Tool Registration (extends #3's tool registry)
 ```python
+# Standalone wrapper — not the FastAPI endpoint (Depends won't resolve from tool registry)
+def tool_filter_events(time_min: str | None = None, time_max: str | None = None, days: int | None = None, keyword: str | None = None, location: str | None = None) -> dict:
+    service = get_service()
+    now = datetime.now(timezone.utc)
+    if time_min and time_max:
+        pass  # use provided range
+    elif days:
+        time_min = now.isoformat()
+        time_max = (now + timedelta(days=days)).isoformat()
+    else:
+        time_min = (now - timedelta(days=30)).isoformat()
+        time_max = (now + timedelta(days=30)).isoformat()
+    events = _fetch_events(service, time_min, time_max)
+    if keyword:
+        kw = keyword.lower()
+        events = [e for e in events if kw in e.get("summary", "").lower() or kw in (e.get("description") or "").lower()]
+    if location:
+        loc = location.lower()
+        events = [e for e in events if loc in (e.get("location") or "").lower()]
+    return {"events": events}
+
 ToolRegistry.register(
     name="filter_events",
     description="Filter calendar events by date range, keyword, or location",
@@ -92,7 +117,7 @@ ToolRegistry.register(
             "location": {"type": "string", "description": "Search in location"},
         },
     },
-    handler=filter_events,  # The endpoint function itself, which accepts EventFilterRequest kwargs
+    handler=tool_filter_events,
 )
 
 ToolRegistry.register(

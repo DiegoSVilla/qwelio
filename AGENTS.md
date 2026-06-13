@@ -86,7 +86,7 @@ Persist conversation turn (user msg + assistant response + tool calls)
 | Tool | Description | Backend Route |
 |------|-------------|---------------|
 | `create_event` | Create a calendar event | `POST /api/calendar/events` |
-| `edit_event` | Update an existing event | `PUT /api/calendar/events/{id}` |
+| `edit_event` | Update an existing event | `PATCH /api/calendar/events/{id}` |
 | `delete_event` | Remove an event | `DELETE /api/calendar/events/{id}` |
 | `list_events` | List events by date range | `GET /api/calendar/events?start=&end=` |
 | `filter_events` | Filter by keyword, location, etc. | `GET /api/calendar/events?filter=` |

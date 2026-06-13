@@ -18,6 +18,9 @@
 
 ## Technical Implementation
 
+### New Dependencies
+- `aiosqlite` — add to `backend/pyproject.toml` `[project.dependencies]`
+
 ### Storage Backend
 Use **aiosqlite** (async-safe wrapper around SQLite) to avoid blocking the event loop:
 ```python
@@ -98,17 +101,34 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
     history = await get_history(user.id, limit=MAX_CONTEXT_TURNS)
     messages = [{"role": "system", "content": build_system_prompt(...)}] + history + req.messages
 
-    # Run tool loop (uses working copy internally, never mutates input)
-    content = await chat_with_tools(messages)
+    # Run tool loop — returns (content, tool_trace)
+    content, tool_trace = await chat_with_tools(messages)
 
-    # Persist new turns
+    # Persist new turns (including tool calls and results)
     turn_order = max([h.get("turn_order", 0) for h in history], default=0) + 1
     for msg in req.messages:
         await save_turn(user.id, msg.role, msg.content, None, None, turn_order)
         turn_order += 1
+    # Persist tool calls and results from the trace
+    for trace_msg in tool_trace:
+        await save_turn(
+            user.id,
+            trace_msg["role"],
+            trace_msg.get("content"),
+            trace_msg.get("tool_calls"),
+            trace_msg.get("tool_call_id"),
+            turn_order,
+        )
+        turn_order += 1
     await save_turn(user.id, "assistant", content, None, None, turn_order)
 
     return {"content": content}
+
+@app.get("/api/conversations")
+async def get_conversations(limit: int = 50, user: User = Depends(get_current_user)):
+    """Get conversation history for rendering in the frontend chat panel."""
+    history = await get_history(user.id, limit=limit)
+    return {"messages": history}
 
 @app.delete("/api/conversations")
 async def clear_conversations(user: User = Depends(get_current_user)):

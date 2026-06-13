@@ -1,5 +1,9 @@
 # Issue #8: Time-Aware System Prompt (timezone, current time)
 
+## Dependencies
+- **Requires #1 (Authentication)** — `PUT /api/timezone` uses `Depends(get_current_user)`
+- **Requires #4 (System prompt)** — extends `build_system_prompt` with timezone-aware formatting
+
 ## Functional Requirements
 - System prompt always includes the current time in both UTC and user's local timezone
 - User can configure their timezone (default: inferred from system or set in `.env`)
@@ -23,7 +27,13 @@ self.user_timezone = os.getenv("USER_TIMEZONE", "America/New_York")
 
 ### Timezone-Aware Event Fetching (`gcalendar.py`)
 ```python
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from dateutil import parser as dateutil_parser
+
+def parse_datetime(iso_str: str) -> datetime:
+    """Parse ISO 8601 datetime string or date-only string to datetime."""
+    return dateutil_parser.parse(iso_str, default=datetime.now(timezone.utc))
 
 def get_user_now(user_timezone: str = "America/New_York"):
     """Get current datetime in user's timezone."""

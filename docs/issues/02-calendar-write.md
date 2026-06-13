@@ -51,8 +51,16 @@ async def edit_event(event_id: str, req: EventUpdateRequest, user: User = Depend
 @app.delete("/api/calendar/events/{event_id}")
 async def delete_event(event_id: str, user: User = Depends(get_current_user)):
     """Delete an event."""
-    service = get_service()
-    service.events().delete(calendarId="primary", eventId=event_id).execute()
+    try:
+        service = get_service()
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
+    try:
+        service.events().delete(calendarId="primary", eventId=event_id).execute()
+    except googleapiclient.errors.HttpError as e:
+        if e.status_code == 404:
+            raise HTTPException(404, f"Event {event_id} not found")
+        raise
     return {"deleted": event_id}
 ```
 
@@ -84,9 +92,21 @@ class EventUpdateRequest(BaseModel):
 
 ### Error Handling
 - `create_event`: Duplicate detection queries existing events in the same time window with matching summary before insertion. If found → return 409 with `{"error": "Duplicate event", "existing_id": ...}`. This requires a preliminary `_fetch_events` call for the target time range.
-- `edit_event`: handle missing event → return 404
+- `edit_event`: handle missing event → return 404 (via `googleapiclient.errors.HttpError` catch)
 - `delete_event`: handle missing event → return 404
 - All endpoints catch `NotAuthenticated` → return 200 with `{"auth_required": True, "auth_url": ...}`
+- All endpoints wrapped in try/except `NotAuthenticated` to return auth URL
+
+### CORS Update
+- The new HTTP methods `PATCH`, `DELETE`, and `PUT` must be added to the CORS middleware:
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "PUT"],
+    allow_headers=["Content-Type"],
+)
+```
 
 ### Frontend
 - No immediate frontend changes — write operations are LLM-driven via tool calls

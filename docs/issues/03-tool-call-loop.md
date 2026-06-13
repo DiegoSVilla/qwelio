@@ -62,24 +62,44 @@ class ToolRegistry:
 ```
 
 ### Tool Definitions (registered at startup)
+
+**Important**: Handlers are standalone wrapper functions, NOT the FastAPI endpoint functions directly. FastAPI's `Depends()` won't resolve when called from the tool registry. Each wrapper acquires the service/user context internally:
+
+```python
+def tool_create_event(summary: str, start: str, end: str, location: str | None = None, description: str | None = None) -> dict:
+    service = get_service()
+    event = service.events().insert(calendarId="primary", body={"summary": summary, "start": {"dateTime": start}, "end": {"dateTime": end}, **{k: v for k, v in {"location": location, "description": description}.items() if v}}).execute()
+    return {"id": event["id"], "status": event.get("status", "confirmed")}
+
+def tool_list_events(time_min: str | None = None, time_max: str | None = None, days: int = 7) -> list[dict]:
+    service = get_service()
+    if time_min and time_max:
+        return _fetch_events(service, time_min, time_max)
+    return list_events(service, days=days)
+```
+
 | Tool | Parameters | Handler |
 |------|-----------|---------|
-| `create_event` | `summary`, `start` (ISO 8601), `end` (ISO 8601), `location?`, `description?` | `gcalendar.create_event()` |
-| `edit_event` | `event_id`, `summary?`, `start?`, `end?`, `location?`, `description?` | `gcalendar.update_event()` |
-| `delete_event` | `event_id` | `gcalendar.delete_event()` |
-| `list_events` | `time_min?` (ISO 8601), `time_max?` (ISO 8601), `days?` (default 7) | `gcalendar._fetch_events()` |
-| `get_today_events` | (none) | `gcalendar.get_today_events()` |
+| `create_event` | `summary`, `start` (ISO 8601), `end` (ISO 8601), `location?`, `description?` | `tool_create_event()` |
+| `edit_event` | `event_id`, `summary?`, `start?`, `end?`, `location?`, `description?` | `tool_edit_event()` |
+| `delete_event` | `event_id` | `tool_delete_event()` |
+| `list_events` | `time_min?` (ISO 8601), `time_max?` (ISO 8601), `days?` (default 7) | `tool_list_events()` |
+| `get_today_events` | (none) | `tool_get_today_events()` |
 | `filter_events` | `time_min?`, `time_max?`, `days?`, `keyword?`, `location?` | Added by #7 (extends this registry) |
 
 ### Modified Chat Loop (`backend/llm.py`)
 ```python
 MAX_TOOL_ITERATIONS = 5
 
-async def chat_with_tools(messages: list[dict], conversation_id: str | None = None) -> str:
-    """Execute the tool call loop. Never mutates the input messages list."""
+async def chat_with_tools(messages: list[dict], conversation_id: str | None = None) -> tuple[str, list[dict]]:
+    """Execute the tool call loop. Returns (final_content, tool_trace).
+    tool_trace contains all tool call and tool result messages for persistence (#5).
+    Never mutates the input messages list.
+    """
     client = _get_client()
     model = _get_model()
     tool_definitions = ToolRegistry.get_definitions()
+    tool_trace = []  # Collected tool messages for persistence
 
     # Work on a copy to avoid mutating the caller's messages (which may be persisted history from #5)
     working_messages = list(messages)
@@ -95,36 +115,38 @@ async def chat_with_tools(messages: list[dict], conversation_id: str | None = No
         message = resp.choices[0].message
 
         if message.tool_calls:
+            # Group all tool calls from this response into a single assistant message
+            tool_call_dumps = [tc.model_dump() for tc in message.tool_calls]
+            assistant_msg = {
+                "role": "assistant",
+                "content": message.content,
+                "tool_calls": tool_call_dumps,
+            }
+            working_messages.append(assistant_msg)
+            tool_trace.append(assistant_msg)
+
+            # Execute each tool and append results
             for tool_call in message.tool_calls:
                 tool_name = tool_call.function.name
                 try:
                     arguments = json.loads(tool_call.function.arguments)
                 except json.JSONDecodeError as e:
                     result = f"Error: Invalid JSON in tool arguments for {tool_name}: {e}"
-                    working_messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result,
-                    })
-                    continue
+                else:
+                    try:
+                        result = await ToolRegistry.execute(tool_name, arguments)
+                    except LLMError as e:
+                        result = f"Error: {e}"
 
-                try:
-                    result = await ToolRegistry.execute(tool_name, arguments)
-                except LLMError as e:
-                    result = f"Error: {e}"
-
-                working_messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [tool_call.model_dump()],
-                })
-                working_messages.append({
+                tool_result_msg = {
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": result,
-                })
+                }
+                working_messages.append(tool_result_msg)
+                tool_trace.append(tool_result_msg)
         else:
-            return message.content or ""
+            return (message.content or "", tool_trace)
 
     raise LLMError(f"Tool loop exceeded {MAX_TOOL_ITERATIONS} iterations")
 ```
@@ -134,11 +156,13 @@ async def chat_with_tools(messages: list[dict], conversation_id: str | None = No
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
     try:
-        content = await chat_with_tools(req.messages)
+        content, tool_trace = await chat_with_tools(req.messages)
         return {"content": content}
     except LLMError as e:
         return {"error": str(e)}
 ```
+
+**Note**: The full endpoint with history persistence, system prompt, and tool trace saving is shown in #5's spec. This snippet shows the core call pattern.
 
 ### Safety Guards
 - `MAX_TOOL_ITERATIONS` = 5 — prevents infinite loops
