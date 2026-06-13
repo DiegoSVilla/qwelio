@@ -1,26 +1,12 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, AsyncMock, MagicMock
-import os
 from gcalendar import NotAuthenticated
 
 
 @pytest.fixture
-def app():
-    with patch.dict(os.environ, {
-        "QWEN_API_KEY": "test-key",
-        "QWEN_API_URL": "https://test.example.com/v1",
-        "MODEL_NAME": "test-model",
-        "GOOGLE_CLIENT_ID": "",
-        "GOOGLE_CLIENT_SECRET": "",
-    }):
-        from main import app
-        yield app
-
-
-@pytest.fixture
-async def client(app):
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+async def client(app_no_calendar):
+    async with AsyncClient(transport=ASGITransport(app=app_no_calendar), base_url="http://test") as ac:
         yield ac
 
 
@@ -97,66 +83,48 @@ class TestCalendarNotAuthenticated:
             resp = await client.get("/api/calendar/auth")
             assert resp.status_code == 200
             data = resp.json()
-            assert "auth_url" in data
+            assert data["auth_url"] == "http://auth.url"
 
 
 class TestCalendarAuthenticated:
+    @pytest.fixture
+    async def client_cal(self, app_with_calendar):
+        async with AsyncClient(transport=ASGITransport(app=app_with_calendar), base_url="http://test") as ac:
+            yield ac
+
     @pytest.mark.asyncio
-    async def test_calendar_today_success(self, client):
+    async def test_calendar_today_success(self, client_cal):
         mock_service = MagicMock()
         mock_events = [{"summary": "Test Event", "start": {"dateTime": "2025-01-01T10:00:00Z"}}]
 
         with patch("main.get_service", return_value=mock_service):
-            with patch("main.get_today_events", return_value=mock_events):
-                resp = await client.get("/api/calendar/today")
+            with patch("main.get_today_events", return_value=mock_events) as mock_today:
+                resp = await client_cal.get("/api/calendar/today")
                 assert resp.status_code == 200
                 data = resp.json()
                 assert data["events"] == mock_events
+                mock_today.assert_called_once_with(mock_service)
 
     @pytest.mark.asyncio
-    async def test_calendar_week_success(self, client):
+    async def test_calendar_week_success(self, client_cal):
         mock_service = MagicMock()
         mock_events = [{"summary": "Meeting", "start": {"dateTime": "2025-01-01T09:00:00Z"}}]
 
         with patch("main.get_service", return_value=mock_service):
-            with patch("main.list_events", return_value=mock_events):
-                resp = await client.get("/api/calendar/week")
+            with patch("main.list_events", return_value=mock_events) as mock_list:
+                resp = await client_cal.get("/api/calendar/week")
                 assert resp.status_code == 200
                 data = resp.json()
                 assert data["events"] == mock_events
+                mock_list.assert_called_once_with(mock_service, days=7)
 
     @pytest.mark.asyncio
-    async def test_calendar_auth_already_authenticated(self, client):
+    async def test_calendar_auth_already_authenticated(self, client_cal):
         mock_service = MagicMock()
         with patch("main.get_service", return_value=mock_service):
-            resp = await client.get("/api/calendar/auth")
+            resp = await client_cal.get("/api/calendar/auth")
             assert resp.status_code == 200
             assert resp.json() == {"error": "Already authenticated"}
-
-
-class TestCalendarCallback:
-    @pytest.mark.asyncio
-    async def test_callback_success(self, client):
-        mock_service = MagicMock()
-        with patch("main.auth_flow") as mock_auth:
-            mock_auth.return_value = mock_service
-            resp = await client.get("/api/calendar/callback", params={
-                "state": "https://accounts.google.com/o/oauth2/auth?response_type=code&..."
-            })
-            assert resp.status_code == 200
-            assert "Success!" in resp.text
-            assert "Calendar authorized" in resp.text
-
-    @pytest.mark.asyncio
-    async def test_callback_failure(self, client):
-        with patch("main.auth_flow") as mock_auth:
-            mock_auth.side_effect = Exception("OAuth failed")
-            resp = await client.get("/api/calendar/callback", params={
-                "state": "https://accounts.google.com/o/oauth2/auth?response_type=code&..."
-            })
-            assert resp.status_code == 500
-            assert "Error" in resp.text
-            assert "Authorization failed" in resp.text
 
 
 class TestCORS:

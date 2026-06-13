@@ -1,5 +1,4 @@
 import pytest
-import os
 import json
 from unittest.mock import patch, MagicMock
 
@@ -42,6 +41,8 @@ class TestFormatEvents:
         result = _format_events(events)
         assert result[0]["start"] == "2025-01-01"
         assert result[0]["end"] == "2025-01-02"
+        assert result[0]["location"] is None
+        assert result[0]["description"] is None
 
     def test_format_missing_fields(self):
         events = [{}]
@@ -56,23 +57,25 @@ class TestFormatEvents:
         assert _format_events([]) == []
 
 
-class TestNotAuthenticated:
-    def test_exception_stores_url(self):
-        exc = NotAuthenticated("http://auth.url")
-        assert exc.auth_url == "http://auth.url"
-        assert "http://auth.url" in str(exc)
+def test_not_authenticated_stores_url():
+    exc = NotAuthenticated("http://auth.url")
+    assert exc.auth_url == "http://auth.url"
+    assert "http://auth.url" in str(exc)
 
 
 class TestGetService:
-    def test_not_auth_when_no_creds(self, clean_google_env):
-        clean_google_env.unlink(missing_ok=True)
-        with patch.dict(os.environ, {}, clear=True):
+    def test_not_auth_when_no_creds(self, google_env_setup):
+        google_env_setup.unlink(missing_ok=True)
+        with patch.dict("os.environ", {
+            "GOOGLE_CLIENT_ID": "",
+            "GOOGLE_CLIENT_SECRET": "",
+        }):
             with pytest.raises(NotAuthenticated):
                 get_service()
 
-    def test_not_auth_when_no_google_env(self, clean_google_env):
-        clean_google_env.unlink(missing_ok=True)
-        with patch.dict(os.environ, {
+    def test_not_auth_when_no_google_env(self, google_env_setup):
+        google_env_setup.unlink(missing_ok=True)
+        with patch.dict("os.environ", {
             "GOOGLE_CLIENT_ID": "",
             "GOOGLE_CLIENT_SECRET": "",
         }):
@@ -94,7 +97,7 @@ class TestGetService:
 
 
 class TestSaveToken:
-    def test_save_token_writes_file(self, clean_google_env):
+    def test_save_token_writes_file(self, google_env_setup):
         creds_data = {
             "token": "test-token",
             "refresh_token": "refresh",
@@ -108,10 +111,10 @@ class TestSaveToken:
             setattr(mock_creds, k, v)
 
         _save_token(mock_creds)
-        data = json.loads(clean_google_env.read_text())
+        data = json.loads(google_env_setup.read_text())
         assert data["token"] == "test-token"
 
-    def test_save_token_sets_permissions_0600(self, clean_google_env):
+    def test_save_token_sets_permissions_0600(self, google_env_setup):
         creds_data = {
             "token": "test-token",
             "refresh_token": "refresh",
@@ -125,7 +128,7 @@ class TestSaveToken:
             setattr(mock_creds, k, v)
 
         _save_token(mock_creds)
-        mode = clean_google_env.stat().st_mode & 0o777
+        mode = google_env_setup.stat().st_mode & 0o777
         assert mode == 0o600
 
 
@@ -159,7 +162,7 @@ class TestFetchEvents:
 
 
 class TestAuthFlow:
-    def test_auth_flow_returns_service(self, clean_google_env):
+    def test_auth_flow_returns_service(self, google_env_setup):
         mock_service = MagicMock()
         mock_flow = MagicMock()
         mock_flow.credentials.token = "token"
@@ -174,7 +177,7 @@ class TestAuthFlow:
                 result = auth_flow("mock_auth_response")
                 assert result is mock_service
 
-    def test_auth_flow_saves_token(self, clean_google_env):
+    def test_auth_flow_saves_token(self, google_env_setup):
         mock_service = MagicMock()
         mock_flow = MagicMock()
         mock_flow.credentials.token = "token"
@@ -188,13 +191,13 @@ class TestAuthFlow:
             with patch("gcalendar.build", return_value=mock_service):
                 auth_flow("mock_auth_response")
 
-        saved = json.loads(clean_google_env.read_text())
+        saved = json.loads(google_env_setup.read_text())
         assert saved["token"] == "token"
 
 
 class TestLoadCredentials:
-    def test_load_credentials_returns_none_when_no_file(self, clean_google_env):
-        clean_google_env.unlink()
+    def test_load_credentials_returns_none_when_no_file(self, google_env_setup):
+        google_env_setup.unlink()
         creds = _load_credentials()
         assert creds is None
 

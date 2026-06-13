@@ -1,6 +1,7 @@
 import pytest
 import json
 import os
+import importlib
 from unittest.mock import patch, MagicMock
 
 
@@ -21,7 +22,7 @@ def token_file(tmp_path):
 
 
 @pytest.fixture
-def mock_credentials(tmp_path):
+def mock_credentials():
     """Create mock credentials object for testing."""
     mock = MagicMock()
     mock.token = "test-token"
@@ -35,7 +36,7 @@ def mock_credentials(tmp_path):
 
 
 @pytest.fixture
-def clean_google_env(tmp_path):
+def google_env_setup(tmp_path):
     """Set up Google OAuth env vars and TOKEN_PATH for tests that need real flow behavior."""
     token_path = tmp_path / ".calendar_token.json"
     token_path.touch()
@@ -52,9 +53,36 @@ def clean_google_env(tmp_path):
 def mock_google_service():
     """Create a mock Google Calendar service."""
     service = MagicMock()
-    service.events = MagicMock()
-    service.events.return_value = MagicMock()
-    service.events.return_value.list = MagicMock()
-    service.events.return_value.list.return_value = MagicMock()
-    service.events.return_value.list.return_value.execute = MagicMock()
+    service.events.return_value.list.return_value.execute.return_value = {"items": []}
     return service
+
+
+@pytest.fixture
+def app_no_calendar():
+    """FastAPI app fixture without Google Calendar credentials (NotAuthenticated path)."""
+    with patch.dict(os.environ, {
+        "QWEN_API_KEY": "test-key",
+        "QWEN_API_URL": "https://test.example.com/v1",
+        "MODEL_NAME": "test-model",
+        "GOOGLE_CLIENT_ID": "",
+        "GOOGLE_CLIENT_SECRET": "",
+    }):
+        import main
+        importlib.reload(main)
+        yield main.app
+
+
+@pytest.fixture
+def app_with_calendar():
+    """FastAPI app fixture with Google Calendar credentials (authenticated path)."""
+    with patch.dict(os.environ, {
+        "QWEN_API_KEY": "test-key",
+        "QWEN_API_URL": "https://test.example.com/v1",
+        "MODEL_NAME": "test-model",
+        "GOOGLE_CLIENT_ID": "test-client",
+        "GOOGLE_CLIENT_SECRET": "test-secret",
+        "GOOGLE_REDIRECT_URI": "http://localhost:8000/api/calendar/callback",
+    }):
+        import main
+        importlib.reload(main)
+        yield main.app

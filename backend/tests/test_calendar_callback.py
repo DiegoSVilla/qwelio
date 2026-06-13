@@ -1,26 +1,11 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, MagicMock
-import os
 
 
 @pytest.fixture
-def app():
-    with patch.dict(os.environ, {
-        "QWEN_API_KEY": "test-key",
-        "QWEN_API_URL": "https://test.example.com/v1",
-        "MODEL_NAME": "test-model",
-        "GOOGLE_CLIENT_ID": "test-client",
-        "GOOGLE_CLIENT_SECRET": "test-secret",
-        "GOOGLE_REDIRECT_URI": "http://localhost:8000/api/calendar/callback",
-    }):
-        from main import app
-        yield app
-
-
-@pytest.fixture
-async def client(app):
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+async def client(app_with_calendar):
+    async with AsyncClient(transport=ASGITransport(app=app_with_calendar), base_url="http://test") as ac:
         yield ac
 
 

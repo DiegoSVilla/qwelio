@@ -83,7 +83,7 @@ class TestChat:
                 await chat([{"role": "user", "content": "Hi"}])
 
     def test_no_api_key_raises(self):
-        with patch.dict("os.environ", {}, clear=True):
+        with patch.dict("os.environ", {"QWEN_API_KEY": ""}):
             with pytest.raises(RuntimeError, match="QWEN_API_KEY not set"):
                 _ = llm._get_client()
 
