@@ -21,7 +21,7 @@ async function fetch(url) {
     http.get(url, (res) => {
       let data = "";
       res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => resolve({ status: res.statusCode, body: data }));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
     }).on("error", reject);
   });
 }
@@ -133,18 +133,16 @@ async function run() {
     // Test 6: CORS headers
     console.log("\n  CORS:");
     const corsRes = await fetch(`http://localhost:${BACKEND_PORT}/api/calendar/today`);
-    // Mock backend sets CORS, real backend should too
-    assert(true, "CORS headers present (mock backend)");
-
+    assert(corsRes.headers["access-control-allow-origin"] === "*", "Mock backend sets CORS headers");
   } catch (e) {
     console.error(`  ✗ Test error: ${e.message}`);
     failed++;
+  } finally {
+    mockBackend.close();
+    frontend.close();
+    console.log(`\n  Results: ${passed} passed, ${failed} failed`);
+    process.exit(failed > 0 ? 1 : 0);
   }
-
-  mockBackend.close();
-  frontend.close();
-  console.log(`\n  Results: ${passed} passed, ${failed} failed`);
-  process.exit(failed > 0 ? 1 : 0);
 }
 
 run().catch((e) => {

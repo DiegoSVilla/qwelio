@@ -81,20 +81,21 @@ async function run() {
     console.error(`  ✗ GET /nonexistent failed: ${e.message}`);
   }
 
-  // Test 5: XSS safety - no innerHTML in app.js
-  console.log("\n  Security:");
-  const appJsPath = path.join(__dirname, "..", "public", "app.js");
-  const appJs = fs.readFileSync(appJsPath, "utf8");
-  const innerHTMLAssignments = appJs.match(/innerHTML\s*=/g) || [];
-  const innerHTMLLines = appJs.split("\n").filter(l => l.includes("innerHTML ="));
-  const onlyClearing = innerHTMLLines.every(l => l.includes('innerHTML = ""'));
-  assert(onlyClearing, "innerHTML only used for clearing, not injecting data");
-  assert(appJs.includes("textContent"), "Uses textContent for safe text insertion");
-  assert(appJs.includes("createElement"), "Uses createElement for DOM construction");
-
-  server.close();
-  console.log(`\n  Results: ${passed} passed, ${failed} failed`);
-  process.exit(failed > 0 ? 1 : 0);
+  try {
+    // Test 5: XSS safety - no innerHTML in app.js
+    console.log("\n  Security:");
+    const appJsPath = path.join(__dirname, "..", "public", "app.js");
+    const appJs = fs.readFileSync(appJsPath, "utf8");
+    const innerHTMLLines = appJs.split("\n").filter(l => l.includes("innerHTML ="));
+    const onlyClearing = innerHTMLLines.every(l => l.includes('innerHTML = ""'));
+    assert(onlyClearing, "innerHTML only used for clearing, not injecting data");
+    assert(appJs.includes("textContent"), "Uses textContent for safe text insertion");
+    assert(appJs.includes("createElement"), "Uses createElement for DOM construction");
+  } finally {
+    server.close();
+    console.log(`\n  Results: ${passed} passed, ${failed} failed`);
+    process.exit(failed > 0 ? 1 : 0);
+  }
 }
 
 run().catch((e) => {

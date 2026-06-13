@@ -68,7 +68,7 @@ def _format_events(events):
         formatted.append({
             "summary": e.get("summary", "No title"),
             "start": start.get("dateTime") or start.get("date"),
-            "end": e.get("end", {}).get("dateTime"),
+            "end": (e.get("end", {}) or {}).get("dateTime") or (e.get("end", {}) or {}).get("date"),
             "location": e.get("location"),
             "description": e.get("description"),
         })
