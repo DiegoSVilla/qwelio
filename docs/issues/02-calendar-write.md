@@ -56,7 +56,7 @@ async def edit_event(event_id: str, req: EventUpdateRequest, user: User = Depend
         if e.status_code == 404:
             raise HTTPException(404, f"Event {event_id} not found")
         raise
-    for field, value in req.model_dump(exclude_none=True).items():
+    for field, value in req.to_gapi_dict().items():
         existing[field] = value
     updated = service.events().update(calendarId="primary", eventId=event_id, body=existing).execute()
     return {"id": updated["id"]}
@@ -101,6 +101,21 @@ class EventUpdateRequest(BaseModel):
     end: str | None = None
     location: str | None = None
     description: str | None = None
+
+    def to_gapi_dict(self) -> dict:
+        """Convert non-None fields to Google API format."""
+        result = {}
+        if self.summary is not None:
+            result["summary"] = self.summary
+        if self.start is not None:
+            result["start"] = {"dateTime": self.start} if "T" in self.start else {"date": self.start}
+        if self.end is not None:
+            result["end"] = {"dateTime": self.end} if "T" in self.end else {"date": self.end}
+        if self.location is not None:
+            result["location"] = self.location
+        if self.description is not None:
+            result["description"] = self.description
+        return result
 ```
 
 ### Error Handling

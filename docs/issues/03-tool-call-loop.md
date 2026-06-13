@@ -117,9 +117,8 @@ async def chat_with_tools(messages: list[dict]) -> tuple[str, list[dict]]:
     tool_definitions = ToolRegistry.get_definitions()
     tool_trace = []  # Collected tool messages for persistence
 
-    # Import settings from #6 — defaults to 0.6 if not configured
-    from llm import _get_settings
-    settings = _get_settings()
+        # Import settings from #6 — defaults to 0.6 if not configured
+        from settings import settings
 
     # Work on a copy to avoid mutating the caller's messages (which may be persisted history from #5)
     working_messages = list(messages)

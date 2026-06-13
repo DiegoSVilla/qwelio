@@ -128,7 +128,13 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
         content, tool_trace = await chat_with_tools(messages)
 
         # Persist new turns (including tool calls and results) via batch insert
-        turn_order = max([h.get("turn_order", 0) for h in history], default=0) + 1
+        # Query max turn_order from DB (not from truncated history) to avoid collisions
+        async with aiosqlite.connect(DB_PATH) as conn:
+            cursor = await conn.execute(
+                "SELECT COALESCE(MAX(turn_order), 0) FROM conversations WHERE user_id = ?",
+                (user.id,),
+            )
+            turn_order = (await cursor.fetchone())[0] + 1
         turns = []
         for msg in req.messages:
             turns.append((user.id, msg.role, msg.content, None, None, turn_order))
