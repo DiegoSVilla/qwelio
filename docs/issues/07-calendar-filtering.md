@@ -1,5 +1,9 @@
 # Issue #7: Calendar Filtering (custom date ranges, keyword, location)
 
+## Dependencies
+- **Requires #1 (Authentication)** — endpoint uses `Depends(get_current_user)`
+- **Requires #3 (Tool call loop)** — `filter_events` extends the tool registry defined in #3
+
 ## Functional Requirements
 - List events for custom date ranges: "show me events from Jan 1-15"
 - Filter events by keyword: "what meetings do I have with Ana?"
@@ -54,20 +58,26 @@ async def filter_events(req: EventFilterRequest, user: User = Depends(get_curren
 
 ### Natural Language Date Parsing
 - Use `dateutil.parser` for parsing relative dates: "next Tuesday", "3pm tomorrow"
-- Register as a tool: `parse_date(description: str) → {time_min, time_max}`
+- Register as a tool: `parse_date_range(description: str) → {time_min, time_max}`
 ```python
 from dateutil import parser as dateutil_parser
 
-def parse_date(description: str) -> dict:
-    """Parse natural language date description to ISO 8601 range."""
+def parse_date_range(description: str) -> dict:
+    """Parse natural language date description to ISO 8601 range.
+    
+    Handles single dates ("next Tuesday" → that day 00:00-23:59) and
+    ranges ("next week" → Monday 00:00 to Sunday 23:59).
+    """
     try:
         dt = dateutil_parser.parse(description, default=datetime.now(timezone.utc))
-        return {"datetime": dt.isoformat()}
+        day_start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = dt.replace(hour=23, minute=59, second=59)
+        return {"time_min": day_start.isoformat(), "time_max": day_end.isoformat()}
     except ValueError as e:
         raise LLMError(f"Could not parse date: {description}")
 ```
 
-### Tool Registration
+### Tool Registration (extends #3's tool registry)
 ```python
 ToolRegistry.register(
     name="filter_events",
@@ -84,6 +94,18 @@ ToolRegistry.register(
     },
     handler=lambda **kwargs: filter_events_by_criteria(**kwargs),
 )
+
+ToolRegistry.register(
+    name="parse_date_range",
+    description="Parse natural language date description (e.g., 'next Tuesday', 'this month') into a date range",
+    parameters={
+        "type": "object",
+        "properties": {
+            "description": {"type": "string", "description": "Natural language date description"},
+        },
+    },
+    handler=parse_date_range,
+)
 ```
 
 ## Acceptance Criteria
@@ -94,5 +116,6 @@ ToolRegistry.register(
 - [ ] Location filter searches in location (case-insensitive)
 - [ ] Filters can be combined
 - [ ] Default range: ±30 days when no range specified
-- [ ] `parse_date` tool handles natural language dates
-- [ ] Tests: each filter individually, combined filters, empty results, invalid dates, keyword matching
+- [ ] `parse_date_range` tool returns `{time_min, time_max}` for use with `filter_events`
+- [ ] `filter_events` tool registered in ToolRegistry (extends #3)
+- [ ] Tests: each filter individually, combined filters, empty results, invalid dates, keyword matching, date range parsing

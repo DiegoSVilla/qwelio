@@ -1,5 +1,10 @@
 # Issue #4: Dynamic System Prompt with Calendar Context Injection
 
+## Dependencies
+- **Requires #1 (Authentication)** — endpoint uses `Depends(get_current_user)`
+- **Requires #3 (Tool call loop)** — tool definitions are injected into the system prompt
+- **Extended by #8 (Time-aware prompt)** — timezone handling is moved to `ZoneInfo` in #8; this spec uses a placeholder approach
+
 ## Functional Requirements
 - Each LLM turn receives a system prompt enriched with:
   - Current datetime (UTC + user timezone)
@@ -19,7 +24,7 @@
 ### System Prompt Builder (`backend/prompt.py`)
 ```python
 from datetime import datetime, timezone
-from typing import Optional
+from zoneinfo import ZoneInfo
 
 def build_system_prompt(
     current_time: datetime,
@@ -29,7 +34,11 @@ def build_system_prompt(
     tool_definitions: list[dict],
 ) -> str:
     """Build the system prompt with fresh calendar context."""
-    now_local = current_time.astimezone(timezone(user_timezone))
+    try:
+        tz = ZoneInfo(user_timezone)
+        now_local = current_time.astimezone(tz)
+    except Exception:
+        now_local = current_time  # fallback to UTC
 
     today_section = format_events_section("Today's agenda", today_events)
     week_section = format_events_section("This week's events", week_events)
@@ -61,7 +70,9 @@ def format_events_section(title: str, events: list[dict]) -> str:
         return f"### {title}\n(No events)\n"
     lines = [f"### {title}"]
     for e in events:
-        lines.append(f"- {e['summary']} | {e['start']} to {e['end']}")
+        start = e.get("start") or "N/A"
+        end = e.get("end") or "N/A"
+        lines.append(f"- {e.get('summary', 'No title')} | {start} to {end}")
         if e.get("location"):
             lines.append(f"  Location: {e['location']}")
     return "\n".join(lines) + "\n"
@@ -120,14 +131,16 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
 - If total prompt tokens exceed model's max (e.g., 8192 for Gemma), drop oldest conversation turns first
 - Calendar context is always preserved (it's small: ~500 tokens max)
 - Configurable via `MAX_CONTEXT_TURNS` env var (default: 20)
+- **Note**: `_fetch_events` currently caps at `maxResults=50`. For busy calendars, a 7-day window could exceed this. Consider increasing `maxResults` or implementing pagination if users report truncated event lists.
 
 ## Acceptance Criteria
-- [ ] System prompt includes current time in both UTC and user timezone
+- [ ] System prompt includes current time in both UTC and user timezone (via ZoneInfo)
 - [ ] System prompt includes today's events formatted as bullet list
 - [ ] System prompt includes this week's events
 - [ ] System prompt lists available tools with descriptions
 - [ ] Calendar context is fresh on every turn (not cached)
+- [ ] `format_events_section` handles None/null start/end gracefully
 - [ ] LLM correctly references events by name and time
 - [ ] LLM correctly calculates relative dates ("tomorrow", "next Tuesday")
 - [ ] Context window overflow drops oldest conversation turns
-- [ ] Tests: prompt builder with events, empty events, timezone conversion, tool formatting, overflow truncation
+- [ ] Tests: prompt builder with events, empty events, timezone conversion, tool formatting, overflow truncation, null event fields

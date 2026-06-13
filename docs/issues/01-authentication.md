@@ -30,8 +30,9 @@
 ### Security
 - Session cookie: `HttpOnly`, `Secure` (if HTTPS), `SameSite=Strict`
 - Session secret: read from `.env` (`SESSION_SECRET`)
-- Rate limit login endpoint: max 5 attempts per minute per IP
+- Rate limit login endpoint: max 5 attempts per minute per **session** (tracked via in-memory dict keyed by session ID, not IP — avoids issues behind proxies/load balancers)
 - No password hashing needed for hardcoded credentials (not production-ready, documented as such)
+- OAuth callback state validation: the `state` parameter passed to `/api/calendar/callback` must be validated against the state generated during auth initiation to prevent CSRF attacks in the OAuth flow
 
 ## Acceptance Criteria
 - [ ] Unauthenticated users see login page instead of dashboard
@@ -41,5 +42,6 @@
 - [ ] `GET /api/calendar/today` with valid session → 200
 - [ ] `POST /api/auth/logout` → clears session, redirects to login
 - [ ] Session persists across browser reload
-- [ ] Login rate limited to 5 attempts/minute
-- [ ] Tests: login success, failure, rate limit, session expiry, protected routes
+- [ ] Login rate limited to 5 attempts/minute per session
+- [ ] OAuth callback validates state parameter against generated state
+- [ ] Tests: login success, failure, rate limit, session expiry, protected routes, state validation

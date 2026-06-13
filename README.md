@@ -26,7 +26,7 @@ cd qwelio
 # Install dependencies
 npm run install:all
 
-# Configure .env (copy from .env.example or create manually)
+# Configure .env (create manually)
 # Required: QWEN_API_URL, QWEN_API_KEY, MODEL_NAME
 # Optional: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
 
@@ -64,6 +64,14 @@ MODEL_NAME=google/gemma-4-12B-it-qat-w4a16-ct
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/api/calendar/callback
+
+# Inference settings (optional, defaults shown)
+LLM_TEMPERATURE=0.6
+LLM_TIMEOUT=30.0
+LLM_MAX_RETRIES=2
+MAX_CONTEXT_TURNS=20
+MAX_TOOL_ITERATIONS=5
+USER_TIMEZONE=America/New_York
 ```
 
 ## Agent Flow
