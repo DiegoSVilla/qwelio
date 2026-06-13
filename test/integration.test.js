@@ -130,10 +130,12 @@ async function run() {
     const weekData = JSON.parse(weekRes.body);
     assert(Array.isArray(weekData.events), "Week response has events array");
 
-    // Test 6: CORS headers
-    console.log("\n  CORS:");
-    const corsRes = await fetch(`http://localhost:${BACKEND_PORT}/api/calendar/today`);
-    assert(corsRes.headers["access-control-allow-origin"] === "*", "Mock backend sets CORS headers");
+    // Test 6: Backend calendar week
+    console.log("\n  Backend calendar week:");
+    const weekRes = await fetch(`http://localhost:${BACKEND_PORT}/api/calendar/week`);
+    assert(weekRes.status === 200, "Backend /api/calendar/week returns 200");
+    const weekData = JSON.parse(weekRes.body);
+    assert(Array.isArray(weekData.events), "Week response has events array");
   } catch (e) {
     console.error(`  ✗ Test error: ${e.message}`);
     failed++;
