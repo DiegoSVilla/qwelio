@@ -90,6 +90,16 @@ class TestLogin:
         }, headers={"X-Forwarded-For": "1.2.3.4"})
         assert resp.status_code == 429
 
+    @pytest.mark.asyncio
+    async def test_login_success_not_rate_limited(self, client):
+        """Successful logins should not count against rate limit."""
+        for _ in range(10):
+            resp = await client.post("/api/auth/login", json={
+                "username": "admin",
+                "password": "lels1234",
+            })
+            assert resp.status_code == 200
+
 
 class TestLogout:
     @pytest.mark.asyncio
@@ -253,8 +263,8 @@ class TestCalendarAuthenticated:
 
 class TestOAuthStateValidation:
     @pytest.mark.asyncio
-    async def test_callback_missing_state(self, client):
-        resp = await client.get("/api/calendar/callback")
+    async def test_callback_missing_state(self, auth_client):
+        resp = await auth_client.get("/api/calendar/callback")
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
@@ -265,8 +275,7 @@ class TestOAuthStateValidation:
     @pytest.mark.asyncio
     async def test_callback_callback_unauthenticated(self, client):
         resp = await client.get("/api/calendar/callback?state=randomvalue")
-        assert resp.status_code == 400
-        assert "Invalid or missing state" in resp.text
+        assert resp.status_code == 401
 
 
 class TestCORS:
@@ -351,6 +360,17 @@ class TestSessionPersistence:
             set_cookie = resp.headers["set-cookie"]
             assert "httponly" in set_cookie.lower()
 
+    @pytest.mark.asyncio
+    async def test_session_cookie_is_samesite_lax(self, app_no_calendar):
+        async with AsyncClient(transport=ASGITransport(app=app_no_calendar), base_url="http://test") as ac:
+            resp = await ac.post("/api/auth/login", json={
+                "username": "admin",
+                "password": "lels1234",
+            })
+            assert resp.status_code == 200
+            set_cookie = resp.headers["set-cookie"]
+            assert "samesite=lax" in set_cookie.lower()
+
 
 class TestRateLimiter:
     def test_rate_limiter_allows_under_limit(self):
@@ -360,6 +380,7 @@ class TestRateLimiter:
         mock_request.headers = {}
         for _ in range(3):
             assert limiter.is_limited(mock_request) is False
+            limiter.record(mock_request)
 
     def test_rate_limiter_blocks_over_limit(self):
         limiter = auth.RateLimiter(max_attempts=3, window_seconds=60)
@@ -367,7 +388,7 @@ class TestRateLimiter:
         mock_request.client.host = "127.0.0.1"
         mock_request.headers = {}
         for _ in range(3):
-            limiter.is_limited(mock_request)
+            limiter.record(mock_request)
         assert limiter.is_limited(mock_request) is True
 
     def test_rate_limiter_x_forwarded_for(self):
@@ -375,8 +396,8 @@ class TestRateLimiter:
         mock_request = MagicMock()
         mock_request.client.host = "127.0.0.1"
         mock_request.headers = {"X-Forwarded-For": "10.0.0.1, 10.0.0.2"}
-        limiter.is_limited(mock_request)
-        limiter.is_limited(mock_request)
+        limiter.record(mock_request)
+        limiter.record(mock_request)
         assert limiter.is_limited(mock_request) is True
 
     def test_rate_limiter_different_ips_independent(self):
@@ -387,6 +408,27 @@ class TestRateLimiter:
         req2 = MagicMock()
         req2.client.host = "2.2.2.2"
         req2.headers = {}
-        limiter.is_limited(req1)
+        limiter.record(req1)
         assert limiter.is_limited(req1) is True
         assert limiter.is_limited(req2) is False
+
+    def test_rate_limiter_cleanup(self):
+        limiter = auth.RateLimiter(max_attempts=2, window_seconds=1)
+        mock_request = MagicMock()
+        mock_request.client.host = "127.0.0.1"
+        mock_request.headers = {}
+        limiter.record(mock_request)
+        limiter.record(mock_request)
+        assert limiter.is_limited(mock_request) is True
+        import time
+        time.sleep(1.1)
+        assert limiter.is_limited(mock_request) is False
+
+    def test_verify_password_correct(self):
+        assert auth.verify_password("admin", "lels1234") is True
+
+    def test_verify_password_wrong(self):
+        assert auth.verify_password("admin", "wrong") is False
+
+    def test_verify_password_unknown_user(self):
+        assert auth.verify_password("nobody", "anything") is False

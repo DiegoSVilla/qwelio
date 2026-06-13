@@ -63,7 +63,7 @@ function createEventEl(e, showDate) {
 }
 
 function setPlaceholder(container, text) {
-  container.innerHTML = "";
+  while (container.firstChild) container.removeChild(container.firstChild);
   const p = createEl("p", "placeholder", text);
   container.appendChild(p);
 }

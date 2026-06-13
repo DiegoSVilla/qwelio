@@ -1,5 +1,6 @@
 import os
 import secrets
+import hmac
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +13,7 @@ from dotenv import load_dotenv
 
 from llm import chat, LLMError
 from gcalendar import get_service, auth_flow, list_events, get_today_events, NotAuthenticated
-from auth import User, HARDCODED_USERS, SESSION_KEY, _rate_limiter, get_current_user
+from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 
 load_dotenv()
 
@@ -21,14 +22,26 @@ app = FastAPI(title="Qwelio")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
+session_secret = os.getenv("SESSION_SECRET")
+if not session_secret:
+    secret_file = os.path.join(os.path.dirname(__file__), ".session_secret")
+    if os.path.exists(secret_file):
+        session_secret = open(secret_file).read().strip()
+    else:
+        session_secret = secrets.token_hex(32)
+        with open(secret_file, "w") as f:
+            f.write(session_secret)
+        os.chmod(secret_file, 0o600)
+
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", secrets.token_hex(32)),
-    https_only=False,
+    secret_key=session_secret,
+    https_only=os.getenv("HTTPS_ONLY", "false").lower() == "true",
+    max_age=86400,
 )
 
 
@@ -50,7 +63,8 @@ class LoginRequest(BaseModel):
 async def api_login(request: Request, req: LoginRequest):
     if _rate_limiter.is_limited(request):
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
-    if req.username not in HARDCODED_USERS or HARDCODED_USERS[req.username] != req.password:
+    if not verify_password(req.username, req.password):
+        _rate_limiter.record(request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     user = User(id=req.username, username=req.username)
     request.session[SESSION_KEY] = user.model_dump()
@@ -78,7 +92,7 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
 
 
 @app.get("/api/calendar/auth")
-async def calendar_auth(request: Request):
+async def calendar_auth(request: Request, user: User = Depends(get_current_user)):
     try:
         get_service()
         return {"error": "Already authenticated"}
@@ -89,13 +103,13 @@ async def calendar_auth(request: Request):
 
 
 @app.get("/api/calendar/callback")
-async def calendar_callback(request: Request, state: str = Query(...)):
+async def calendar_callback(request: Request, state: str = Query(...), user: User = Depends(get_current_user)):
     stored_state = request.session.get("oauth_state")
-    if not stored_state or stored_state != state:
+    if not stored_state or not hmac.compare_digest(stored_state, state):
         return HTMLResponse("<h1>Error</h1><p>Invalid or missing state parameter.</p>", status_code=400)
     request.session.pop("oauth_state", None)
     try:
-        auth_flow(state)
+        auth_flow(str(request.url))
         return HTMLResponse(
             "<h1>Success!</h1><p>Calendar authorized. You can close this window.</p>"
         )

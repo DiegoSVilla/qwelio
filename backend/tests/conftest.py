@@ -87,6 +87,7 @@ def app_no_calendar():
         "MODEL_NAME": "test-model",
         "GOOGLE_CLIENT_ID": "",
         "GOOGLE_CLIENT_SECRET": "",
+        "SESSION_SECRET": "test-secret-for-testing",
     }):
         import main
         importlib.reload(main)
@@ -103,6 +104,7 @@ def app_with_calendar():
         "GOOGLE_CLIENT_ID": "test-client",
         "GOOGLE_CLIENT_SECRET": "test-secret",
         "GOOGLE_REDIRECT_URI": "http://localhost:8000/api/calendar/callback",
+        "SESSION_SECRET": "test-secret-for-testing",
     }):
         import main
         importlib.reload(main)

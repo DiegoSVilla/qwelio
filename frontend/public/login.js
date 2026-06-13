@@ -8,6 +8,8 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
 
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value;
+  const btn = e.target.querySelector("button");
+  btn.disabled = true;
 
   try {
     const res = await fetch(`${API}/auth/login`, {
@@ -31,5 +33,7 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   } catch {
     errorDiv.textContent = "Failed to connect to the server.";
     errorDiv.style.display = "block";
+  } finally {
+    btn.disabled = false;
   }
 });
