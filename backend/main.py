@@ -1,6 +1,9 @@
 import os
 import secrets
 import hmac
+from contextlib import asynccontextmanager
+
+import aiosqlite
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,10 +19,29 @@ from llm import chat_with_tools, LLMError
 from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, _fetch_events, NotAuthenticated
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 from tools import ToolRegistry
+from storage import init_db, save_turns, get_history, clear_history, cleanup_old_history, get_summaries
+from storage import DB_PATH
 
 load_dotenv()
 
-app = FastAPI(title="Qwelio")
+MAX_CONTEXT_TURNS = int(os.getenv("MAX_CONTEXT_TURNS", "20"))
+HISTORY_RETENTION_DAYS = int(os.getenv("HISTORY_RETENTION_DAYS", "30"))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    await cleanup_old_history(HISTORY_RETENTION_DAYS)
+    yield
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            await conn.commit()
+    except Exception:
+        pass
+
+
+app = FastAPI(title="Qwelio", lifespan=lifespan)
 
 
 app.add_middleware(
@@ -294,9 +316,44 @@ async def api_me(user: User = Depends(get_current_user)):
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
     try:
+        history = await get_history(user.id, limit=MAX_CONTEXT_TURNS)
+        clean_history = [{k: v for k, v in h.items() if k != "turn_order"} for h in history]
+        messages = clean_history + [m.model_dump() for m in req.messages]
         tool_defs = ToolRegistry.get_definitions()
-        content = await chat_with_tools(req.messages, tool_defs)
+        content, new_msgs = await chat_with_tools(messages, tool_defs)
+
+        turns = [(m.role, m.content, None, None) for m in req.messages]
+        for msg in new_msgs:
+            turns.append((msg["role"], msg.get("content"), msg.get("tool_calls"), msg.get("tool_call_id")))
+        await save_turns(user.id, turns)
+
         return {"content": content}
+    except LLMError as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/conversations")
+async def get_conversations(limit: int = Query(default=50, ge=1, le=200), user: User = Depends(get_current_user)):
+    history = await get_history(user.id, limit=limit)
+    summaries = await get_summaries(user.id)
+    return {
+        "history": history,
+        "summaries": summaries,
+    }
+
+
+@app.delete("/api/conversations")
+async def clear_conversations(user: User = Depends(get_current_user)):
+    await clear_history(user.id)
+    return {"cleared": True}
+
+
+@app.post("/api/conversations/summarize")
+async def trigger_summarize(user: User = Depends(get_current_user)):
+    from summarizer import generate_summaries
+    try:
+        results = await generate_summaries(user.id)
+        return {"summarized": results}
     except LLMError as e:
         return {"error": str(e)}
 

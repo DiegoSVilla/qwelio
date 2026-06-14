@@ -12,6 +12,7 @@ dependencies = [
     "google-auth-oauthlib",
     "python-dotenv",
     "itsdangerous",
+    "aiosqlite",
 ]
 
 [project.optional-dependencies]

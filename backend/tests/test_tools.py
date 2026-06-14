@@ -78,8 +78,10 @@ class TestChatWithTools:
             mock_client_fn.return_value = mock_client
             with patch("llm._get_model", return_value="test-model"):
                 from llm import chat_with_tools
-                result = await chat_with_tools([{"role": "user", "content": "hi"}], [])
-                assert result == "Hello"
+                content, new_msgs = await chat_with_tools([{"role": "user", "content": "hi"}], [])
+                assert content == "Hello"
+                assert len(new_msgs) == 1
+                assert new_msgs[0]["content"] == "Hello"
 
     @pytest.mark.asyncio
     async def test_tool_call_injected_and_loops(self):
@@ -109,8 +111,8 @@ class TestChatWithTools:
                 with patch("tools.ToolRegistry.execute", new_callable=AsyncMock) as mock_exec:
                     mock_exec.return_value = '{"result": 42}'
                     from llm import chat_with_tools
-                    result = await chat_with_tools([{"role": "user", "content": "hi"}], [])
-                    assert result == "Done!"
+                    content, new_msgs = await chat_with_tools([{"role": "user", "content": "hi"}], [])
+                    assert content == "Done!"
                     mock_exec.assert_called_once_with("test_tool", {"x": 1})
 
     @pytest.mark.asyncio
@@ -166,8 +168,8 @@ class TestChatWithTools:
             with patch("llm._get_model", return_value="test-model"):
                 with patch("tools.ToolRegistry.execute", new_callable=AsyncMock) as mock_exec:
                     from llm import chat_with_tools
-                    result = await chat_with_tools([{"role": "user", "content": "hi"}], [])
-                    assert result == "Got it"
+                    content, new_msgs = await chat_with_tools([{"role": "user", "content": "hi"}], [])
+                    assert content == "Got it"
                     mock_exec.assert_not_called()
 
     @pytest.mark.asyncio
@@ -196,8 +198,8 @@ class TestChatWithTools:
             mock_client_fn.return_value = mock_client
             with patch("llm._get_model", return_value="test-model"):
                 from llm import chat_with_tools
-                result = await chat_with_tools([{"role": "user", "content": "hi"}], [])
-                assert result == "OK"
+                content, new_msgs = await chat_with_tools([{"role": "user", "content": "hi"}], [])
+                assert content == "OK"
 
     @pytest.mark.asyncio
     async def test_multiple_tool_calls_single_message(self):
@@ -234,8 +236,8 @@ class TestChatWithTools:
                 with patch("tools.ToolRegistry.execute", new_callable=AsyncMock) as mock_exec:
                     mock_exec.side_effect = ['{"a": 1}', '{"b": 2}']
                     from llm import chat_with_tools
-                    result = await chat_with_tools([{"role": "user", "content": "hi"}], [])
-                    assert result == "Both done"
+                    content, new_msgs = await chat_with_tools([{"role": "user", "content": "hi"}], [])
+                    assert content == "Both done"
                     assert mock_exec.call_count == 2
                     assert mock_exec.call_args_list[0].args == ("tool_a", {"x": 1})
                     assert mock_exec.call_args_list[1].args == ("tool_b", {"y": 2})

@@ -33,3 +33,4 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+backend/conversations.db
