@@ -99,9 +99,7 @@ async function loadToday() {
     container.innerHTML = "";
     data.events.forEach(e => container.appendChild(createEventEl(e, false)));
   } catch (err) {
-    container.innerHTML = "";
-    const p = createEl("p", "error", "Failed to load today's events.");
-    container.appendChild(p);
+    setPlaceholder(container, "Failed to load today's events.");
   }
 }
 
@@ -124,9 +122,7 @@ async function loadWeek() {
     container.innerHTML = "";
     data.events.forEach(e => container.appendChild(createEventEl(e, true)));
   } catch (err) {
-    container.innerHTML = "";
-    const p = createEl("p", "error", "Failed to load week's events.");
-    container.appendChild(p);
+    setPlaceholder(container, "Failed to load week's events.");
   }
 }
 

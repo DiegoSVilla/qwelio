@@ -26,6 +26,8 @@ class RateLimiter:
         self._requests: dict[str, list[float]] = {}
 
     def _client_ip(self, request: Request) -> str:
+        # Note: X-Forwarded-For is trusted without proxy validation.
+        # In production, ensure a reverse proxy strips/rewrites this header.
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
             return forwarded.split(",")[0].strip()

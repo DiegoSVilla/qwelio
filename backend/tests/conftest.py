@@ -80,7 +80,12 @@ def mock_google_service():
 
 @pytest.fixture
 def app_no_calendar():
-    """FastAPI app fixture without Google Calendar credentials (NotAuthenticated path)."""
+    """FastAPI app fixture without Google Calendar credentials (NotAuthenticated path).
+
+    Note: Uses importlib.reload(main) which is fragile — resets all module-level state.
+    SESSION_SECRET is set in env to prevent file-based secret creation during tests.
+    Consider replacing with a create_app() factory before the test suite grows significantly.
+    """
     with patch.dict(os.environ, {
         "QWEN_API_KEY": "test-key",
         "QWEN_API_URL": "https://test.example.com/v1",

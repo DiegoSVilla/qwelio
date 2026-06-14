@@ -31,6 +31,9 @@ class TestCalendarCallback:
             assert resp.status_code == 200
             assert "Success!" in resp.text
             assert "Calendar authorized" in resp.text
+            call_arg = mock_auth.call_args[0][0]
+            assert "/api/calendar/callback" in call_arg
+            assert "state=" in call_arg
 
     @pytest.mark.asyncio
     async def test_callback_failure(self, client):

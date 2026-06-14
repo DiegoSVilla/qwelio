@@ -28,14 +28,14 @@ app.add_middleware(
 
 session_secret = os.getenv("SESSION_SECRET")
 if not session_secret:
-    secret_file = os.path.join(os.path.dirname(__file__), ".session_secret")
-    if os.path.exists(secret_file):
-        session_secret = open(secret_file).read().strip()
+    import pathlib
+    secret_file = pathlib.Path(__file__).parent / ".session_secret"
+    if secret_file.exists():
+        session_secret = secret_file.read_text().strip()
     else:
         session_secret = secrets.token_hex(32)
-        with open(secret_file, "w") as f:
-            f.write(session_secret)
-        os.chmod(secret_file, 0o600)
+        secret_file.write_text(session_secret)
+        secret_file.chmod(0o600)
 
 app.add_middleware(
     SessionMiddleware,
