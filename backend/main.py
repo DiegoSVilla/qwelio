@@ -17,7 +17,7 @@ from llm import chat_with_tools, LLMError
 from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, _fetch_events, NotAuthenticated
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 from tools import ToolRegistry
-from storage import init_db, save_turn, get_history, get_turn_count, clear_history, cleanup_old_history, get_summaries
+from storage import init_db, save_turn, get_history, next_turn_order, clear_history, cleanup_old_history, get_summaries
 
 load_dotenv()
 
@@ -308,16 +308,19 @@ async def api_me(user: User = Depends(get_current_user)):
 async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
     try:
         history = await get_history(user.id, limit=MAX_CONTEXT_TURNS)
-        messages = history + req.messages
+        clean_history = [{k: v for k, v in h.items() if k != "turn_order"} for h in history]
+        messages = clean_history + req.messages
         tool_defs = ToolRegistry.get_definitions()
-        content = await chat_with_tools(messages, tool_defs)
+        content, new_msgs = await chat_with_tools(messages, tool_defs)
 
-        turn_order = await get_turn_count(user.id)
-        turn_order += 1
+        turn_order = await next_turn_order(user.id)
         for msg in req.messages:
             await save_turn(user.id, msg.role, msg.content, None, None, turn_order)
             turn_order += 1
-        await save_turn(user.id, "assistant", content, None, None, turn_order)
+        for msg in new_msgs:
+            tc = msg.get("tool_calls")
+            await save_turn(user.id, msg["role"], msg.get("content"), tc, msg.get("tool_call_id"), turn_order)
+            turn_order += 1
 
         return {"content": content}
     except LLMError as e:
@@ -343,8 +346,11 @@ async def clear_conversations(user: User = Depends(get_current_user)):
 @app.post("/api/conversations/summarize")
 async def trigger_summarize(user: User = Depends(get_current_user)):
     from summarizer import generate_summaries
-    results = await generate_summaries(user.id)
-    return {"summarized": results}
+    try:
+        results = await generate_summaries(user.id)
+        return {"summarized": results}
+    except LLMError as e:
+        return {"error": str(e)}
 
 
 @app.get("/api/calendar/auth")

@@ -1,5 +1,6 @@
 import aiosqlite
 import json
+import calendar
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
@@ -31,8 +32,16 @@ async def init_db():
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS _turn_counter (
+                user_id TEXT PRIMARY KEY,
+                counter INTEGER NOT NULL DEFAULT 0
+            )
+        """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_turn ON conversations(user_id, turn_order)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_timestamp ON conversations(timestamp)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_period ON summaries(user_id, period, period_start)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_summaries_created_at ON summaries(created_at)")
         await conn.commit()
 
 
@@ -43,6 +52,25 @@ async def save_turn(user_id: str, role: str, content: str | None, tool_calls: li
             (user_id, role, content, json.dumps(tool_calls) if tool_calls else None, tool_call_id, turn_order),
         )
         await conn.commit()
+
+
+async def next_turn_order(user_id: str) -> int:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT OR IGNORE INTO _turn_counter (user_id, counter) VALUES (?, 0)",
+            (user_id,),
+        )
+        await conn.execute(
+            "UPDATE _turn_counter SET counter = counter + 1 WHERE user_id = ?",
+            (user_id,),
+        )
+        cursor = await conn.execute(
+            "SELECT counter FROM _turn_counter WHERE user_id = ?",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        await conn.commit()
+    return row[0]
 
 
 async def get_history(user_id: str, limit: int = 20) -> list[dict]:
@@ -127,8 +155,6 @@ async def get_pending_summaries(user_id: str) -> list[dict]:
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=today_start.weekday())
-    month_start = today_start.replace(day=1)
-
     pending = []
 
     for d in range(1, 8):
@@ -144,10 +170,16 @@ async def get_pending_summaries(user_id: str) -> list[dict]:
             pending.append(("weekly", ws, we))
 
     for m in range(1, 13):
-        ms_dt = month_start - timedelta(days=1)
-        ms_dt = ms_dt.replace(day=1) - timedelta(days=m)
+        target_month = now.month - m
+        target_year = now.year
+        while target_month < 1:
+            target_month += 12
+            target_year -= 1
+        ms_dt = today_start.replace(year=target_year, month=target_month, day=1)
+        last_day = calendar.monthrange(target_year, target_month)[1]
+        me_dt = ms_dt.replace(day=last_day, hour=23, minute=59, second=59)
         ms = ms_dt.isoformat()
-        me = (ms_dt.replace(day=1) + timedelta(days=1) - timedelta(seconds=1)).isoformat()
+        me = me_dt.isoformat()
         if ("monthly", ms, me) not in existing:
             pending.append(("monthly", ms, me))
 

@@ -53,12 +53,17 @@ async def chat(messages: list[dict]) -> str:
         raise LLMError(f"API error {e.status_code}: {e.message}")
 
 
-async def chat_with_tools(messages: list[dict], tool_definitions: list[dict]) -> str:
-    """Execute the tool call loop. Never mutates the input messages list."""
+async def chat_with_tools(messages: list[dict], tool_definitions: list[dict]) -> tuple[str, list[dict]]:
+    """Execute the tool call loop. Never mutates the input messages list.
+
+    Returns (content, new_messages) where new_messages contains all assistant/tool
+    messages generated during the tool call loop for persistence.
+    """
     client = _get_client()
     model = _get_model()
 
     working_messages = list(messages)
+    new_messages = []
 
     for iteration in range(MAX_TOOL_ITERATIONS):
         try:
@@ -106,19 +111,29 @@ async def chat_with_tools(messages: list[dict], tool_definitions: list[dict]) ->
 
                 tool_results.append((tool_call.id, result))
 
-            working_messages.append({
+            assistant_msg = {
                 "role": "assistant",
                 "content": None,
                 "tool_calls": tool_call_dumps,
-            })
+            }
+            working_messages.append(assistant_msg)
+            new_messages.append(assistant_msg)
 
             for tool_call_id, result in tool_results:
-                working_messages.append({
+                tool_msg = {
                     "role": "tool",
                     "tool_call_id": tool_call_id,
                     "content": result,
-                })
+                }
+                working_messages.append(tool_msg)
+                new_messages.append(tool_msg)
         else:
-            return message.content or ""
+            new_messages.append({
+                "role": "assistant",
+                "content": message.content,
+                "tool_calls": None,
+                "tool_call_id": None,
+            })
+            return message.content or "", new_messages
 
     raise LLMError(f"Tool loop exceeded {MAX_TOOL_ITERATIONS} iterations")

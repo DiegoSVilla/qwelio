@@ -150,12 +150,12 @@ class TestProtectedRoutes:
     @pytest.mark.asyncio
     async def test_chat_authenticated(self, auth_client):
         with patch("main.get_history", new_callable=AsyncMock) as mock_history:
-            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
+            with patch("main.next_turn_order", new_callable=AsyncMock) as mock_next:
                 with patch("main.save_turn", new_callable=AsyncMock):
                     with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
                         mock_history.return_value = []
-                        mock_count.return_value = 0
-                        mock_chat.return_value = "Hello!"
+                        mock_next.return_value = 1
+                        mock_chat.return_value = ("Hello!", [])
                         resp = await auth_client.post("/api/chat", json={
                             "messages": [{"role": "user", "content": "Hi"}]
                         })
@@ -339,16 +339,13 @@ class TestChatValidation:
     async def test_chat_llm_error(self, auth_client):
         from llm import LLMError
         with patch("main.get_history", new_callable=AsyncMock) as mock_history:
-            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
-                with patch("main.save_turn", new_callable=AsyncMock):
-                    with patch("main.chat_with_tools", new_callable=AsyncMock, side_effect=LLMError("API down")):
-                        mock_history.return_value = []
-                        mock_count.return_value = 0
-                        resp = await auth_client.post("/api/chat", json={
-                            "messages": [{"role": "user", "content": "Hi"}]
-                        })
-                        assert resp.status_code == 200
-                        assert resp.json()["error"] == "API down"
+            with patch("main.chat_with_tools", new_callable=AsyncMock, side_effect=LLMError("API down")):
+                mock_history.return_value = []
+                resp = await auth_client.post("/api/chat", json={
+                    "messages": [{"role": "user", "content": "Hi"}]
+                })
+                assert resp.status_code == 200
+                assert resp.json()["error"] == "API down"
 
 
 class TestSessionPersistence:
@@ -789,12 +786,14 @@ class TestConversationEndpoints:
     @pytest.mark.asyncio
     async def test_chat_persists_history(self, auth_client):
         with patch("main.get_history", new_callable=AsyncMock) as mock_history:
-            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
+            with patch("main.next_turn_order", new_callable=AsyncMock) as mock_next:
                 with patch("main.save_turn", new_callable=AsyncMock) as mock_save:
                     with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
                         mock_history.return_value = []
-                        mock_count.return_value = 0
-                        mock_chat.return_value = "Hello!"
+                        mock_next.return_value = 1
+                        mock_chat.return_value = ("Hello!", [
+                            {"role": "assistant", "content": "Hello!", "tool_calls": None, "tool_call_id": None}
+                        ])
                         resp = await auth_client.post("/api/chat", json={
                             "messages": [{"role": "user", "content": "Hi"}]
                         })
@@ -809,14 +808,14 @@ class TestConversationEndpoints:
     @pytest.mark.asyncio
     async def test_chat_includes_history(self, auth_client):
         with patch("main.get_history", new_callable=AsyncMock) as mock_history:
-            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
+            with patch("main.next_turn_order", new_callable=AsyncMock) as mock_next:
                 with patch("main.save_turn", new_callable=AsyncMock):
                     with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
                         mock_history.return_value = [
                             {"role": "user", "content": "Previous", "tool_calls": None, "tool_call_id": None, "turn_order": 1}
                         ]
-                        mock_count.return_value = 1
-                        mock_chat.return_value = "Response"
+                        mock_next.return_value = 2
+                        mock_chat.return_value = ("Response", [])
                         resp = await auth_client.post("/api/chat", json={
                             "messages": [{"role": "user", "content": "Current"}]
                         })
@@ -829,12 +828,14 @@ class TestConversationEndpoints:
     @pytest.mark.asyncio
     async def test_chat_turn_order_increments(self, auth_client):
         with patch("main.get_history", new_callable=AsyncMock) as mock_history:
-            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
+            with patch("main.next_turn_order", new_callable=AsyncMock) as mock_next:
                 with patch("main.save_turn", new_callable=AsyncMock) as mock_save:
                     with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
                         mock_history.return_value = []
-                        mock_count.return_value = 5
-                        mock_chat.return_value = "Reply"
+                        mock_next.return_value = 6
+                        mock_chat.return_value = ("Reply", [
+                            {"role": "assistant", "content": "Reply", "tool_calls": None, "tool_call_id": None}
+                        ])
                         resp = await auth_client.post("/api/chat", json={
                             "messages": [
                                 {"role": "user", "content": "Msg1"},
@@ -846,3 +847,37 @@ class TestConversationEndpoints:
                         assert save_calls[0][0][5] == 6
                         assert save_calls[1][0][5] == 7
                         assert save_calls[2][0][5] == 8
+
+    @pytest.mark.asyncio
+    async def test_chat_persists_tool_calls(self, auth_client):
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.next_turn_order", new_callable=AsyncMock) as mock_next:
+                with patch("main.save_turn", new_callable=AsyncMock) as mock_save:
+                    with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
+                        mock_history.return_value = []
+                        mock_next.return_value = 1
+                        tool_call_data = [{"function": {"name": "create_event", "arguments": "{}"}}]
+                        mock_chat.return_value = ("Done!", [
+                            {"role": "assistant", "content": None, "tool_calls": tool_call_data, "tool_call_id": None},
+                            {"role": "tool", "content": "Created", "tool_calls": None, "tool_call_id": "call-1"},
+                            {"role": "assistant", "content": "Done!", "tool_calls": None, "tool_call_id": None},
+                        ])
+                        resp = await auth_client.post("/api/chat", json={
+                            "messages": [{"role": "user", "content": "Create event"}]
+                        })
+                        assert resp.status_code == 200
+                        assert mock_save.call_count == 4
+                        save_calls = mock_save.call_args_list
+                        assert save_calls[1][0][1] == "assistant"
+                        assert save_calls[1][0][3] == tool_call_data
+                        assert save_calls[2][0][1] == "tool"
+                        assert save_calls[2][0][4] == "call-1"
+
+    @pytest.mark.asyncio
+    async def test_summarize_cooldown_error(self, auth_client):
+        with patch("summarizer.generate_summaries", new_callable=AsyncMock) as mock_gen:
+            from llm import LLMError
+            mock_gen.side_effect = LLMError("cooldown")
+            resp = await auth_client.post("/api/conversations/summarize")
+            assert resp.status_code == 200
+            assert resp.json()["error"] == "cooldown"

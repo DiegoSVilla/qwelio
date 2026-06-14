@@ -4,6 +4,12 @@ from unittest.mock import patch, AsyncMock
 import summarizer
 
 
+@pytest.fixture(autouse=True)
+def reset_summarizer_cooldown():
+    summarizer._last_summarize.clear()
+    yield
+
+
 class TestBuildSummaryPrompt:
     def test_basic_conversation(self):
         messages = [
