@@ -92,6 +92,44 @@ class TestDoFilter:
         assert result == {"events": []}
 
     @patch("main.get_service")
+    def test_filter_by_time_min_time_max(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.events().list().execute.return_value = {
+            "items": [
+                {"id": "evt1", "summary": "Meeting", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
+            ]
+        }
+        result = _do_filter(time_min="2025-07-01T00:00:00Z", time_max="2025-07-07T00:00:00Z")
+        assert len(result["events"]) == 1
+        assert result["events"][0]["id"] == "evt1"
+
+    @patch("main.get_service")
+    def test_filter_time_min_after_time_max_raises(self, mock_get_service):
+        with pytest.raises(ValueError, match="time_min must be before time_max"):
+            _do_filter(time_min="2025-07-07T00:00:00Z", time_max="2025-07-01T00:00:00Z")
+
+    def test_filter_time_min_after_time_max_mixed_tz(self):
+        with pytest.raises(ValueError, match="time_min must be before time_max"):
+            _do_filter(time_min="2025-07-01T10:00:00+05:00", time_max="2025-07-01T04:00:00+00:00")
+
+    def test_filter_time_min_equal_time_max_raises(self):
+        with pytest.raises(ValueError, match="time_min must be before time_max"):
+            _do_filter(time_min="2025-07-01T00:00:00Z", time_max="2025-07-01T00:00:00Z")
+
+    @patch("main.get_service")
+    def test_filter_event_has_id(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.events().list().execute.return_value = {
+            "items": [
+                {"id": "abc123", "summary": "Test", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
+            ]
+        }
+        result = _do_filter(keyword="Test")
+        assert result["events"][0]["id"] == "abc123"
+
+    @patch("main.get_service")
     def test_filter_keyword_in_description(self, mock_get_service):
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service

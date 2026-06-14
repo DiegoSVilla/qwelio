@@ -240,7 +240,9 @@ def _do_filter(time_min=None, time_max=None, days=None, keyword=None, location=N
     if time_max:
         date.fromisoformat(time_max) if "T" not in time_max else datetime.fromisoformat(time_max.replace("Z", "+00:00"))
     if time_min and time_max:
-        if time_min >= time_max:
+        min_dt = datetime.fromisoformat(time_min.replace("Z", "+00:00")) if "T" in time_min else datetime.fromisoformat(time_min + "T00:00:00+00:00")
+        max_dt = datetime.fromisoformat(time_max.replace("Z", "+00:00")) if "T" in time_max else datetime.fromisoformat(time_max + "T00:00:00+00:00")
+        if min_dt >= max_dt:
             raise ValueError("time_min must be before time_max")
     try:
         service = get_service()
@@ -252,14 +254,13 @@ def _do_filter(time_min=None, time_max=None, days=None, keyword=None, location=N
 
 def _apply_filters(service, time_min=None, time_max=None, days=None, keyword=None, location=None):
     now = datetime.now(timezone.utc)
-    if time_min and time_max:
-        pass
-    elif days is not None:
-        time_min = now.isoformat()
-        time_max = (now + timedelta(days=days)).isoformat()
-    else:
-        time_min = (now - timedelta(days=30)).isoformat()
-        time_max = (now + timedelta(days=30)).isoformat()
+    if time_min is None or time_max is None:
+        if days is not None:
+            time_min = now.isoformat()
+            time_max = (now + timedelta(days=days)).isoformat()
+        else:
+            time_min = (now - timedelta(days=30)).isoformat()
+            time_max = (now + timedelta(days=30)).isoformat()
 
     events = _fetch_events(service, time_min, time_max)
 
