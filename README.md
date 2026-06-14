@@ -7,7 +7,7 @@ An AI-powered calendar assistant that understands natural language and acts on y
 - **Backend**: Python FastAPI (port 8000) — LLM chat, Google Calendar API, authentication
 - **Frontend**: Node Express (port 3000) — static dashboard with week view, today's events, chat panel
 - **LLM**: OpenAI-compatible client (Qwen API) with lazy initialization
-- **Calendar**: Google Calendar OAuth2 with readonly scope (write operations pending)
+- **Calendar**: Google Calendar OAuth2 with read/write scope (`calendar.events`)
 
 ## Requirements
 
@@ -93,7 +93,7 @@ The agent operates as a **retrieval-augmented chat loop**:
 | # | Feature | Issue |
 |---|---------|-------|
 | 1 | User authentication (login/logout/session) | [#1](https://github.com/DiegoSVilla/qwelio/issues/1) ✅ |
-| 2 | Calendar write operations (create/edit/delete) | [#2](https://github.com/DiegoSVilla/qwelio/issues/2) |
+| 2 | Calendar write operations (create/edit/delete) | [#2](https://github.com/DiegoSVilla/qwelio/issues/2) ✅ |
 | 3 | Agentic tool call loop with function calling | [#3](https://github.com/DiegoSVilla/qwelio/issues/3) |
 | 4 | Dynamic system prompt with calendar context injection | [#4](https://github.com/DiegoSVilla/qwelio/issues/4) |
 | 5 | Conversation history persistence | [#5](https://github.com/DiegoSVilla/qwelio/issues/5) |

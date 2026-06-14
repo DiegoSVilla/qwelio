@@ -39,7 +39,7 @@ Qwelio is an AI-powered calendar assistant. The LLM agent is **time-aware** and 
 - OAuth credentials in `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
 - Tokens stored in `backend/.calendar_token.json` (gitignored, chmod 0600)
 - `NotAuthenticated` exception — caught at endpoint level to return `{"auth_required": True, "auth_url": ...}` instead of 401, so unauthenticated clients get a friendly redirect hint
-- Currently **readonly** (`calendar.readonly` scope) — write operations specified in #2
+- **Read/write** (`calendar.events` scope) — create, edit, delete supported
 
 ## Agent Flow (Tool Call Loop)
 
@@ -119,7 +119,7 @@ Persist conversation turn (user msg + assistant response + tool calls)
 | # | Feature | Issue |
 |---|---------|-------|
 | 1 | User authentication (login/logout/session) | [#1](https://github.com/DiegoSVilla/qwelio/issues/1) ✅ |
-| 2 | Calendar write operations (create/edit/delete) | [#2](https://github.com/DiegoSVilla/qwelio/issues/2) |
+| 2 | Calendar write operations (create/edit/delete) | [#2](https://github.com/DiegoSVilla/qwelio/issues/2) ✅ |
 | 3 | Agentic tool call loop with function calling | [#3](https://github.com/DiegoSVilla/qwelio/issues/3) |
 | 4 | Dynamic system prompt with calendar context injection | [#4](https://github.com/DiegoSVilla/qwelio/issues/4) |
 | 5 | Conversation history persistence | [#5](https://github.com/DiegoSVilla/qwelio/issues/5) |
