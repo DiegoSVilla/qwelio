@@ -817,9 +817,49 @@ class TestConversationEndpoints:
                     })
                     assert resp.status_code == 200
                     messages_arg = mock_chat.call_args[0][0]
-                    assert len(messages_arg) == 2
-                    assert messages_arg[0]["content"] == "Previous"
-                    assert messages_arg[1]["content"] == "Current"
+                    assert len(messages_arg) == 3
+                    assert messages_arg[0]["role"] == "system"
+                    assert "Qwelio" in messages_arg[0]["content"]
+                    assert messages_arg[1]["content"] == "Previous"
+                    assert messages_arg[2]["content"] == "Current"
+
+    @pytest.mark.asyncio
+    async def test_chat_system_prompt_contains_calendar_events(self, auth_client):
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.save_turns", new_callable=AsyncMock):
+                with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
+                    with patch("main.get_service"):
+                        with patch("main.get_today_events") as mock_today:
+                            with patch("main.list_events") as mock_week:
+                                mock_history.return_value = []
+                                mock_today.return_value = [{"summary": "Dentist", "start": "09:00", "end": "10:00"}]
+                                mock_week.return_value = [{"summary": "Sprint", "start": "2025-06-20T10:00:00", "end": "2025-06-20T11:00:00"}]
+                                mock_chat.return_value = ("OK", [])
+                                resp = await auth_client.post("/api/chat", json={
+                                    "messages": [{"role": "user", "content": "hi"}]
+                                })
+                                assert resp.status_code == 200
+                                sys_msg = mock_chat.call_args[0][0][0]
+                                assert sys_msg["role"] == "system"
+                                assert "Dentist" in sys_msg["content"]
+                                assert "Sprint" in sys_msg["content"]
+                                assert "Calendar access: available" in sys_msg["content"]
+
+    @pytest.mark.asyncio
+    async def test_chat_calendar_unavailable_in_prompt(self, auth_client):
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.save_turns", new_callable=AsyncMock):
+                with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
+                    with patch("main.get_service", side_effect=Exception("API error")):
+                        mock_history.return_value = []
+                        mock_chat.return_value = ("OK", [])
+                        resp = await auth_client.post("/api/chat", json={
+                            "messages": [{"role": "user", "content": "hi"}]
+                        })
+                        assert resp.status_code == 200
+                        sys_msg = mock_chat.call_args[0][0][0]
+                        assert sys_msg["role"] == "system"
+                        assert "Calendar access: unavailable" in sys_msg["content"]
 
     @pytest.mark.asyncio
     async def test_chat_turn_order_increments(self, auth_client):

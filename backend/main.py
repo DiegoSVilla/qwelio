@@ -1,3 +1,4 @@
+import asyncio
 import os
 import secrets
 import hmac
@@ -21,6 +22,7 @@ from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_pass
 from tools import ToolRegistry
 from storage import init_db, save_turns, get_history, clear_history, cleanup_old_history, get_summaries
 from storage import DB_PATH
+from prompt import build_system_prompt, DEFAULT_TIMEZONE
 
 load_dotenv()
 
@@ -318,8 +320,31 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
     try:
         history = await get_history(user.id, limit=MAX_CONTEXT_TURNS)
         clean_history = [{k: v for k, v in h.items() if k != "turn_order"} for h in history]
-        messages = clean_history + [m.model_dump() for m in req.messages]
+
+        # Fetch calendar context (async-safe, graceful degradation)
+        today_ev = []
+        week_ev = []
+        calendar_available = False
+        try:
+            service = get_service()
+            today_ev = await asyncio.to_thread(get_today_events, service)
+            week_ev = await asyncio.to_thread(list_events, service, days=7)
+            calendar_available = True
+        except Exception:
+            pass
+
+        # Build system prompt with time + calendar context
         tool_defs = ToolRegistry.get_definitions()
+        system_prompt = build_system_prompt(
+            current_time_utc=datetime.now(timezone.utc),
+            user_timezone=DEFAULT_TIMEZONE,
+            today_events=today_ev,
+            week_events=week_ev,
+            tool_definitions=tool_defs,
+            calendar_available=calendar_available,
+        )
+
+        messages = [{"role": "system", "content": system_prompt}] + clean_history + [m.model_dump() for m in req.messages]
         content, new_msgs = await chat_with_tools(messages, tool_defs)
 
         turns = [(m.role, m.content, None, None) for m in req.messages]
