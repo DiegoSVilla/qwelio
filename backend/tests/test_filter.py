@@ -235,3 +235,18 @@ class TestFilterEndpoint:
             resp = await auth_client.post("/api/calendar/filter", json={})
             assert resp.status_code == 200
             assert "events" in resp.json()
+
+    @pytest.mark.asyncio
+    async def test_filter_days_and_time_min_rejected(self, auth_client):
+        resp = await auth_client.post("/api/calendar/filter", json={"days": 14, "time_min": "2025-07-01T00:00:00Z"})
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_filter_time_min_after_time_max_rejected(self, auth_client):
+        resp = await auth_client.post("/api/calendar/filter", json={"time_min": "2025-07-07T00:00:00Z", "time_max": "2025-07-01T00:00:00Z"})
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_filter_time_min_equal_time_max_rejected(self, auth_client):
+        resp = await auth_client.post("/api/calendar/filter", json={"time_min": "2025-07-01T00:00:00Z", "time_max": "2025-07-01T00:00:00Z"})
+        assert resp.status_code == 422

@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal
 from datetime import datetime, date, timezone, timedelta
 
@@ -175,6 +175,17 @@ class EventFilterRequest(BaseModel):
         else:
             date.fromisoformat(v)
         return v
+
+    @model_validator(mode="after")
+    def validate_time_range(self):
+        if self.days is not None and (self.time_min is not None or self.time_max is not None):
+            raise ValueError("Provide either 'days' or 'time_min'/'time_max', not both")
+        if self.time_min and self.time_max:
+            min_dt = datetime.fromisoformat(self.time_min.replace("Z", "+00:00")) if "T" in self.time_min else datetime.fromisoformat(self.time_min + "T00:00:00+00:00")
+            max_dt = datetime.fromisoformat(self.time_max.replace("Z", "+00:00")) if "T" in self.time_max else datetime.fromisoformat(self.time_max + "T00:00:00+00:00")
+            if min_dt >= max_dt:
+                raise ValueError("time_min must be before time_max")
+        return self
 
 
 def _do_create(summary, start, end, location=None, description=None):
