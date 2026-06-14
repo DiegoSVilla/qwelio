@@ -135,23 +135,23 @@ class EventUpdateRequest(BaseModel):
 
 
 def _do_create(summary, start, end, location=None, description=None):
-    EventCreateRequest(summary=summary, start=start, end=end, location=location, description=description)
+    req = EventCreateRequest(summary=summary, start=start, end=end, location=location, description=description)
     try:
         service = get_service()
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
-    return create_event(service, summary, start, end, location, description)
+    return create_event(service, req.summary, req.start, req.end, req.location, req.description)
 
 
 def _do_edit(event_id, summary=None, start=None, end=None, location=None, description=None):
     if not event_id:
         raise ValueError("event_id is required")
-    EventUpdateRequest(summary=summary, start=start, end=end, location=location, description=description)
+    req = EventUpdateRequest(summary=summary, start=start, end=end, location=location, description=description)
     try:
         service = get_service()
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
-    return edit_event(service, event_id, summary, start, end, location, description)
+    return edit_event(service, event_id, req.summary, req.start, req.end, req.location, req.description)
 
 
 def _do_delete(event_id):
@@ -166,6 +166,12 @@ def _do_delete(event_id):
 
 
 def _do_list(time_min=None, time_max=None, days=7):
+    if days is not None and (days < 1 or days > 365):
+        raise ValueError("days must be between 1 and 365")
+    if time_min:
+        date.fromisoformat(time_min) if "T" not in time_min else datetime.fromisoformat(time_min.replace("Z", "+00:00"))
+    if time_max:
+        date.fromisoformat(time_max) if "T" not in time_max else datetime.fromisoformat(time_max.replace("Z", "+00:00"))
     try:
         service = get_service()
     except NotAuthenticated:
