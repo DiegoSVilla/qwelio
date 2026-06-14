@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from httpx import AsyncClient, ASGITransport
 
-from main import _do_filter, _do_parse_date_range
+from main import _do_filter
 from gcalendar import NotAuthenticated
 
 
@@ -25,45 +25,6 @@ async def auth_client(app_no_calendar):
         yield ac
 
 
-# --- _do_parse_date_range ---
-
-class TestParseDateRange:
-    def test_iso_format(self):
-        result = _do_parse_date_range("2025-07-15")
-        assert "time_min" in result
-        assert "time_max" in result
-        assert "2025-07-15" in result["time_min"]
-        assert "2025-07-15" in result["time_max"]
-        assert "T00:00:00" in result["time_min"]
-        assert "T23:59:59" in result["time_max"]
-
-    def test_datetime_format(self):
-        result = _do_parse_date_range("2025-07-15 14:00")
-        assert "time_min" in result
-        assert "time_max" in result
-
-    def test_invalid_date(self):
-        with pytest.raises(ValueError, match="Could not parse date"):
-            _do_parse_date_range("not a date at all xyz123")
-
-    def test_relative_date_next_tuesday(self):
-        result = _do_parse_date_range("next Tuesday")
-        assert "time_min" in result
-        assert "time_max" in result
-        assert "T00:00:00" in result["time_min"]
-        assert "T23:59:59" in result["time_max"]
-
-    def test_today(self):
-        result = _do_parse_date_range("today")
-        assert "time_min" in result
-        assert "time_max" in result
-
-    def test_this_month(self):
-        result = _do_parse_date_range("this month")
-        assert "time_min" in result
-        assert "time_max" in result
-
-
 # --- _do_filter ---
 
 class TestDoFilter:
@@ -78,8 +39,8 @@ class TestDoFilter:
             ]
         }
         result = _do_filter(keyword="Ana")
-        assert len(result) == 1
-        assert result[0]["summary"] == "Meeting with Ana"
+        assert len(result["events"]) == 1
+        assert result["events"][0]["summary"] == "Meeting with Ana"
 
     @patch("main.get_service")
     def test_filter_by_location(self, mock_get_service):
@@ -92,8 +53,8 @@ class TestDoFilter:
             ]
         }
         result = _do_filter(location="Room A")
-        assert len(result) == 1
-        assert result[0]["summary"] == "Standup"
+        assert len(result["events"]) == 1
+        assert result["events"][0]["summary"] == "Standup"
 
     @patch("main.get_service")
     def test_filter_combined_keyword_and_location(self, mock_get_service):
@@ -107,8 +68,8 @@ class TestDoFilter:
             ]
         }
         result = _do_filter(keyword="Ana", location="Room A")
-        assert len(result) == 1
-        assert result[0]["summary"] == "Meeting with Ana"
+        assert len(result["events"]) == 1
+        assert result["events"][0]["summary"] == "Meeting with Ana"
 
     @patch("main.get_service")
     def test_filter_by_days(self, mock_get_service):
@@ -116,7 +77,7 @@ class TestDoFilter:
         mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {"items": []}
         result = _do_filter(days=14)
-        assert result == []
+        assert result == {"events": []}
 
     @patch("main.get_service")
     def test_filter_no_results(self, mock_get_service):
@@ -128,7 +89,7 @@ class TestDoFilter:
             ]
         }
         result = _do_filter(keyword="nonexistent")
-        assert result == []
+        assert result == {"events": []}
 
     @patch("main.get_service")
     def test_filter_keyword_in_description(self, mock_get_service):
@@ -140,7 +101,7 @@ class TestDoFilter:
             ]
         }
         result = _do_filter(keyword="Ana")
-        assert len(result) == 1
+        assert len(result["events"]) == 1
 
     def test_filter_invalid_days(self):
         with pytest.raises(ValueError, match="days must be between 1 and 365"):

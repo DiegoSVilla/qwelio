@@ -5,7 +5,6 @@ import hmac
 from contextlib import asynccontextmanager
 
 import aiosqlite
-from dateutil import parser as dateutil_parser
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -240,11 +239,18 @@ def _do_filter(time_min=None, time_max=None, days=None, keyword=None, location=N
         date.fromisoformat(time_min) if "T" not in time_min else datetime.fromisoformat(time_min.replace("Z", "+00:00"))
     if time_max:
         date.fromisoformat(time_max) if "T" not in time_max else datetime.fromisoformat(time_max.replace("Z", "+00:00"))
+    if time_min and time_max:
+        if time_min >= time_max:
+            raise ValueError("time_min must be before time_max")
     try:
         service = get_service()
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
 
+    events = _apply_filters(service, time_min, time_max, days, keyword, location)
+    return {"events": events}
+
+def _apply_filters(service, time_min=None, time_max=None, days=None, keyword=None, location=None):
     now = datetime.now(timezone.utc)
     if time_min and time_max:
         pass
@@ -265,82 +271,6 @@ def _do_filter(time_min=None, time_max=None, days=None, keyword=None, location=N
         events = [e for e in events if loc in (e.get("location") or "").lower()]
 
     return events
-
-
-def _resolve_relative_date(description: str) -> datetime | None:
-    """Resolve common relative date expressions to a datetime.
-
-    Handles: 'today', 'tomorrow', 'yesterday', 'next <weekday>', 'last <weekday>',
-    'this week', 'next week', 'this month', 'next month'.
-    Returns None if the expression is not recognized.
-    """
-    import re
-
-    now = datetime.now(timezone.utc)
-    desc = description.strip().lower()
-
-    day_map = {
-        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-        "friday": 4, "saturday": 5, "sunday": 6,
-    }
-
-    if desc == "today":
-        return now
-    if desc == "tomorrow":
-        return now + timedelta(days=1)
-    if desc == "yesterday":
-        return now - timedelta(days=1)
-
-    # "next <weekday>" or "last <weekday>"
-    m = re.match(r"^(next|last)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$", desc)
-    if m:
-        direction, weekday_name = m.groups()
-        target_dow = day_map[weekday_name]
-        current_dow = now.weekday()
-        delta = target_dow - current_dow
-        if direction == "next":
-            if delta <= 0:
-                delta += 7
-        else:
-            if delta >= 0:
-                delta -= 7
-        return now + timedelta(days=delta)
-
-    # "this week" / "next week" (Monday-Sunday)
-    if desc == "this week":
-        monday = now - timedelta(days=now.weekday())
-        return monday.replace(hour=0, minute=0, second=0, microsecond=0)
-    if desc == "next week":
-        monday = now - timedelta(days=now.weekday()) + timedelta(weeks=1)
-        return monday.replace(hour=0, minute=0, second=0, microsecond=0)
-
-    # "this month" / "next month"
-    if desc == "this month":
-        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    if desc == "next month":
-        if now.month == 12:
-            return now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        return now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
-
-    return None
-
-
-def _do_parse_date_range(description):
-    from dateutil.parser import ParserError
-
-    resolved = _resolve_relative_date(description)
-    if resolved:
-        day_start = resolved.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = resolved.replace(hour=23, minute=59, second=59)
-        return {"time_min": day_start.isoformat(), "time_max": day_end.isoformat()}
-
-    try:
-        dt = dateutil_parser.parse(description, default=datetime.now(timezone.utc))
-        day_start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = dt.replace(hour=23, minute=59, second=59)
-        return {"time_min": day_start.isoformat(), "time_max": day_end.isoformat()}
-    except (ValueError, OverflowError, ParserError):
-        raise ValueError(f"Could not parse date: {description}")
 
 
 def _register_tools():
@@ -420,32 +350,19 @@ def _register_tools():
 
     ToolRegistry.register(
         "filter_events",
-        "Filter calendar events by date range, keyword, or location",
+        "Filter calendar events by date range, keyword, or location. Use ISO 8601 format for dates (e.g., 2025-07-01T09:00:00+00:00 or 2025-07-01). You can compute dates from the current time provided in the system prompt.",
         {
             "type": "object",
             "properties": {
-                "time_min": {"type": "string", "description": "Start date in ISO 8601 (optional)"},
-                "time_max": {"type": "string", "description": "End date in ISO 8601 (optional)"},
-                "days": {"type": "integer", "description": "Next N days from now (optional, 1-365)"},
-                "keyword": {"type": "string", "description": "Search in summary and description (optional)"},
-                "location": {"type": "string", "description": "Search in location (optional)"},
+                "time_min": {"type": "string", "description": "Start of range in ISO 8601 (e.g., 2025-07-01T00:00:00+00:00). Optional — omit to use default range."},
+                "time_max": {"type": "string", "description": "End of range in ISO 8601 (e.g., 2025-07-31T23:59:59+00:00). Optional — omit to use default range."},
+                "days": {"type": "integer", "description": "Number of days from now (1-365). Use instead of time_min/time_max for relative ranges. Default: 60 days (±30)."},
+                "keyword": {"type": "string", "description": "Search term matched case-insensitively in event summary and description."},
+                "location": {"type": "string", "description": "Search term matched case-insensitively in event location."},
             },
             "required": [],
         },
         _do_filter,
-    )
-
-    ToolRegistry.register(
-        "parse_date_range",
-        "Parse natural language date description (e.g., 'next Tuesday', 'this month') into a date range",
-        {
-            "type": "object",
-            "properties": {
-                "description": {"type": "string", "description": "Natural language date description"},
-            },
-            "required": ["description"],
-        },
-        _do_parse_date_range,
     )
 
 
@@ -651,23 +568,5 @@ async def filter_events(req: EventFilterRequest, user: User = Depends(get_curren
     except NotAuthenticated as e:
         return {"auth_required": True, "auth_url": e.auth_url}
 
-    now = datetime.now(timezone.utc)
-    if req.time_min and req.time_max:
-        time_min, time_max = req.time_min, req.time_max
-    elif req.days is not None:
-        time_min = now.isoformat()
-        time_max = (now + timedelta(days=req.days)).isoformat()
-    else:
-        time_min = (now - timedelta(days=30)).isoformat()
-        time_max = (now + timedelta(days=30)).isoformat()
-
-    events = _fetch_events(service, time_min, time_max)
-
-    if req.keyword:
-        kw = req.keyword.lower()
-        events = [e for e in events if kw in e.get("summary", "").lower() or kw in (e.get("description") or "").lower()]
-    if req.location:
-        loc = req.location.lower()
-        events = [e for e in events if loc in (e.get("location") or "").lower()]
-
+    events = _apply_filters(service, req.time_min, req.time_max, req.days, req.keyword, req.location)
     return {"events": events}
