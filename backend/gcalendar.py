@@ -2,6 +2,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from datetime import datetime, timedelta, timezone
 import os
 import json
@@ -140,11 +141,20 @@ def _to_gapi_event(summary, start, end, location=None, description=None):
 
 
 def create_event(service, summary, start, end, location=None, description=None):
-    existing = _fetch_events(
-        service,
-        start if isinstance(start, str) else start.isoformat(),
-        end if isinstance(end, str) else end.isoformat(),
-    )
+    start_str = start if isinstance(start, str) else start.isoformat()
+    end_str = end if isinstance(end, str) else end.isoformat()
+    # Expand timeMin backwards by event duration to catch overlapping events
+    if "T" in start_str:
+        start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+        duration = (end_dt - start_dt).total_seconds()
+        expanded_start = (start_dt - timedelta(seconds=duration)).isoformat()
+    else:
+        start_dt = datetime.fromisoformat(start_str)
+        end_dt = datetime.fromisoformat(end_str)
+        duration = (end_dt - start_dt).days
+        expanded_start = (start_dt - timedelta(days=max(duration, 1))).strftime("%Y-%m-%d")
+    existing = _fetch_events(service, expanded_start, end_str)
     for e in existing:
         if e["summary"].lower() == summary.lower():
             raise ValueError(f"Duplicate event: {e['summary']}")
@@ -156,14 +166,28 @@ def create_event(service, summary, start, end, location=None, description=None):
 def edit_event(service, event_id, summary=None, start=None, end=None, location=None, description=None):
     try:
         existing = service.events().get(calendarId="primary", eventId=event_id).execute()
-    except Exception:
-        raise KeyError(f"Event {event_id} not found")
+    except HttpError as e:
+        if e.resp.status == 404:
+            raise KeyError(f"Event {event_id} not found")
+        raise
     if summary is not None:
         existing["summary"] = summary
     if start is not None:
-        existing["start"] = {"dateTime": start} if "T" in start else {"date": start}
+        start_obj = existing.get("start", {})
+        if "T" in start:
+            existing["start"] = {"dateTime": start}
+        else:
+            existing["start"] = {"date": start}
+        if "timeZone" in start_obj:
+            existing["start"]["timeZone"] = start_obj["timeZone"]
     if end is not None:
-        existing["end"] = {"dateTime": end} if "T" in end else {"date": end}
+        end_obj = existing.get("end", {})
+        if "T" in end:
+            existing["end"] = {"dateTime": end}
+        else:
+            existing["end"] = {"date": end}
+        if "timeZone" in end_obj:
+            existing["end"]["timeZone"] = end_obj["timeZone"]
     if location is not None:
         existing["location"] = location
     if description is not None:
@@ -175,5 +199,7 @@ def edit_event(service, event_id, summary=None, start=None, end=None, location=N
 def delete_event(service, event_id):
     try:
         service.events().delete(calendarId="primary", eventId=event_id).execute()
-    except Exception:
-        raise KeyError(f"Event {event_id} not found")
+    except HttpError as e:
+        if e.resp.status == 404:
+            raise KeyError(f"Event {event_id} not found")
+        raise

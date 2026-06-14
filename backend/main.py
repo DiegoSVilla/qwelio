@@ -2,12 +2,13 @@ import os
 import secrets
 import hmac
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
+from datetime import datetime, date
 
 from dotenv import load_dotenv
 
@@ -60,19 +61,63 @@ class LoginRequest(BaseModel):
 
 
 class EventCreateRequest(BaseModel):
-    summary: str
+    summary: str = Field(..., min_length=1, max_length=1024)
     start: str
     end: str
-    location: str | None = None
-    description: str | None = None
+    location: str | None = Field(default=None, max_length=2048)
+    description: str | None = Field(default=None)
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_iso8601(cls, v: str) -> str:
+        if "T" in v:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        else:
+            date.fromisoformat(v)
+        return v
+
+    @field_validator("end")
+    @classmethod
+    def validate_end_after_start(cls, v: str, info) -> str:
+        start = info.data.get("start")
+        if start:
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else date.fromisoformat(start)
+            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else date.fromisoformat(v)
+            if end_dt <= start_dt:
+                raise ValueError("end must be after start")
+        return v
 
 
 class EventUpdateRequest(BaseModel):
-    summary: str | None = None
+    summary: str | None = Field(default=None, min_length=1, max_length=1024)
     start: str | None = None
     end: str | None = None
-    location: str | None = None
-    description: str | None = None
+    location: str | None = Field(default=None, max_length=2048)
+    description: str | None = Field(default=None)
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_iso8601(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if "T" in v:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        else:
+            date.fromisoformat(v)
+        return v
+
+    @field_validator("end")
+    @classmethod
+    def validate_end_after_start(cls, v: str | None, info) -> str | None:
+        if v is None:
+            return v
+        start = info.data.get("start")
+        if start:
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else date.fromisoformat(start)
+            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else date.fromisoformat(v)
+            if end_dt <= start_dt:
+                raise ValueError("end must be after start")
+        return v
 
 
 @app.post("/api/auth/login")
@@ -154,7 +199,7 @@ async def calendar_week(user: User = Depends(get_current_user)):
 
 
 @app.post("/api/calendar/events")
-async def create_calendar_event(req: EventCreateRequest, user: User = Depends(get_current_user)):
+async def create_calendar_event(resp: Response, req: EventCreateRequest, user: User = Depends(get_current_user)):
     try:
         service = get_service()
         try:
@@ -166,6 +211,7 @@ async def create_calendar_event(req: EventCreateRequest, user: User = Depends(ge
                 req.location,
                 req.description,
             )
+            resp.status_code = 201
             return {"id": event["id"], "status": event.get("status", "confirmed")}
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))

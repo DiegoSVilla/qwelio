@@ -1,6 +1,6 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock, MagicMock, Mock
 from gcalendar import NotAuthenticated
 
 import auth
@@ -470,7 +470,7 @@ class TestCalendarWriteEndpoints:
                     "location": "Room A",
                     "description": "Sync up",
                 })
-                assert resp.status_code == 200
+                assert resp.status_code == 201
                 data = resp.json()
                 assert data["id"] == "evt-123"
                 assert data["status"] == "confirmed"
@@ -615,8 +615,11 @@ class TestGcalendarWriteFunctions:
 
     def test_edit_event_not_found(self):
         from gcalendar import edit_event
+        from googleapiclient.errors import HttpError
+        from unittest.mock import MagicMock
         mock_service = MagicMock()
-        mock_service.events.return_value.get.return_value.execute.side_effect = Exception("Not found")
+        mock_error = HttpError(Mock(status=404), b"Not found")
+        mock_service.events.return_value.get.return_value.execute.side_effect = mock_error
         with pytest.raises(KeyError, match="not found"):
             edit_event(mock_service, "evt-999", summary="New")
 
@@ -628,7 +631,10 @@ class TestGcalendarWriteFunctions:
 
     def test_delete_event_not_found(self):
         from gcalendar import delete_event
+        from googleapiclient.errors import HttpError
+        from unittest.mock import MagicMock
         mock_service = MagicMock()
-        mock_service.events.return_value.delete.return_value.execute.side_effect = Exception("Not found")
+        mock_error = HttpError(Mock(status=404), b"Not found")
+        mock_service.events.return_value.delete.return_value.execute.side_effect = mock_error
         with pytest.raises(KeyError, match="not found"):
             delete_event(mock_service, "evt-999")
