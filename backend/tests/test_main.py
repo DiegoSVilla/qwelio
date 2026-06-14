@@ -817,9 +817,11 @@ class TestConversationEndpoints:
                     })
                     assert resp.status_code == 200
                     messages_arg = mock_chat.call_args[0][0]
-                    assert len(messages_arg) == 2
-                    assert messages_arg[0]["content"] == "Previous"
-                    assert messages_arg[1]["content"] == "Current"
+                    assert len(messages_arg) == 3
+                    assert messages_arg[0]["role"] == "system"
+                    assert "Qwelio" in messages_arg[0]["content"]
+                    assert messages_arg[1]["content"] == "Previous"
+                    assert messages_arg[2]["content"] == "Current"
 
     @pytest.mark.asyncio
     async def test_chat_turn_order_increments(self, auth_client):
