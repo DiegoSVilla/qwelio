@@ -65,7 +65,7 @@ class EventCreateRequest(BaseModel):
     start: str
     end: str
     location: str | None = Field(default=None, max_length=2048)
-    description: str | None = Field(default=None)
+    description: str | None = Field(default=None, max_length=5000)
 
     @field_validator("start", "end")
     @classmethod
@@ -93,7 +93,7 @@ class EventUpdateRequest(BaseModel):
     start: str | None = None
     end: str | None = None
     location: str | None = Field(default=None, max_length=2048)
-    description: str | None = Field(default=None)
+    description: str | None = Field(default=None, max_length=5000)
 
     @field_validator("start", "end")
     @classmethod
