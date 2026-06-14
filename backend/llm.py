@@ -6,15 +6,13 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 from tools import ToolRegistry
+from settings import settings
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 class LLMError(Exception):
     pass
-
-
-MAX_TOOL_ITERATIONS = int(os.getenv("MAX_TOOL_ITERATIONS", "5"))
 
 
 def _get_client():
@@ -24,13 +22,13 @@ def _get_client():
     return AsyncOpenAI(
         base_url=os.getenv("QWEN_API_URL", "https://inference.beestorm.ai/v1"),
         api_key=api_key,
-        timeout=30.0,
-        max_retries=2,
+        timeout=settings.timeout,
+        max_retries=settings.max_retries,
     )
 
 
 def _get_model():
-    return os.getenv("MODEL_NAME", "google/gemma-4-12B-it-qat-w4a16-ct")
+    return settings.model_name
 
 
 async def chat(messages: list[dict]) -> str:
@@ -40,7 +38,7 @@ async def chat(messages: list[dict]) -> str:
         resp = await client.chat.completions.create(
             model=model,
             messages=messages,
-            temperature=0.6,
+            temperature=settings.temperature,
         )
         if not resp.choices:
             raise LLMError("Empty response from LLM")
@@ -65,12 +63,12 @@ async def chat_with_tools(messages: list[dict], tool_definitions: list[dict]) ->
     working_messages = list(messages)
     new_messages = []
 
-    for iteration in range(MAX_TOOL_ITERATIONS):
+    for iteration in range(settings.max_tool_iterations):
         try:
             resp = await client.chat.completions.create(
                 model=model,
                 messages=working_messages,
-                temperature=0.6,
+                temperature=settings.temperature,
                 tools=tool_definitions,
             )
         except APIConnectionError as e:
@@ -136,4 +134,4 @@ async def chat_with_tools(messages: list[dict], tool_definitions: list[dict]) ->
             })
             return message.content or "", new_messages
 
-    raise LLMError(f"Tool loop exceeded {MAX_TOOL_ITERATIONS} iterations")
+    raise LLMError(f"Tool loop exceeded {settings.max_tool_iterations} iterations")
