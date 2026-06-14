@@ -149,13 +149,18 @@ class TestProtectedRoutes:
 
     @pytest.mark.asyncio
     async def test_chat_authenticated(self, auth_client):
-        with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value = "Hello!"
-            resp = await auth_client.post("/api/chat", json={
-                "messages": [{"role": "user", "content": "Hi"}]
-            })
-            assert resp.status_code == 200
-            assert resp.json() == {"content": "Hello!"}
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
+                with patch("main.save_turn", new_callable=AsyncMock):
+                    with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
+                        mock_history.return_value = []
+                        mock_count.return_value = 0
+                        mock_chat.return_value = "Hello!"
+                        resp = await auth_client.post("/api/chat", json={
+                            "messages": [{"role": "user", "content": "Hi"}]
+                        })
+                        assert resp.status_code == 200
+                        assert resp.json() == {"content": "Hello!"}
 
     @pytest.mark.asyncio
     async def test_calendar_today_unauthenticated(self, client):
@@ -333,12 +338,17 @@ class TestChatValidation:
     @pytest.mark.asyncio
     async def test_chat_llm_error(self, auth_client):
         from llm import LLMError
-        with patch("main.chat_with_tools", new_callable=AsyncMock, side_effect=LLMError("API down")):
-            resp = await auth_client.post("/api/chat", json={
-                "messages": [{"role": "user", "content": "Hi"}]
-            })
-            assert resp.status_code == 200
-            assert resp.json()["error"] == "API down"
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
+                with patch("main.save_turn", new_callable=AsyncMock):
+                    with patch("main.chat_with_tools", new_callable=AsyncMock, side_effect=LLMError("API down")):
+                        mock_history.return_value = []
+                        mock_count.return_value = 0
+                        resp = await auth_client.post("/api/chat", json={
+                            "messages": [{"role": "user", "content": "Hi"}]
+                        })
+                        assert resp.status_code == 200
+                        assert resp.json()["error"] == "API down"
 
 
 class TestSessionPersistence:
@@ -702,3 +712,137 @@ class TestGcalendarWriteFunctions:
         mock_service.events.return_value.delete.return_value.execute.side_effect = mock_error
         with pytest.raises(KeyError, match="not found"):
             delete_event(mock_service, "evt-999")
+
+
+class TestConversationEndpoints:
+    @pytest.mark.asyncio
+    async def test_get_conversations_unauthenticated(self, client):
+        resp = await client.get("/api/conversations")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_conversations_success(self, auth_client):
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.get_summaries", new_callable=AsyncMock) as mock_summaries:
+                mock_history.return_value = [{"role": "user", "content": "Hi", "tool_calls": None, "tool_call_id": None, "turn_order": 1}]
+                mock_summaries.return_value = {"monthly": [], "weekly": [], "daily": []}
+                resp = await auth_client.get("/api/conversations")
+                assert resp.status_code == 200
+                data = resp.json()
+                assert len(data["history"]) == 1
+                assert data["summaries"]["monthly"] == []
+                mock_history.assert_called_once()
+                mock_summaries.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_conversations_limit_param(self, auth_client):
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.get_summaries", new_callable=AsyncMock) as mock_summaries:
+                mock_history.return_value = []
+                mock_summaries.return_value = {"monthly": [], "weekly": [], "daily": []}
+                resp = await auth_client.get("/api/conversations?limit=10")
+                assert resp.status_code == 200
+                assert mock_history.call_args[1]["limit"] == 10
+
+    @pytest.mark.asyncio
+    async def test_get_conversations_limit_too_high(self, client):
+        async with AsyncClient(transport=ASGITransport(app=client._transport.app), base_url="http://test") as ac:
+            await ac.post("/api/auth/login", json={"username": "admin", "password": "lels1234"})
+            resp = await ac.get("/api/conversations?limit=201")
+            assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_get_conversations_limit_too_low(self, client):
+        async with AsyncClient(transport=ASGITransport(app=client._transport.app), base_url="http://test") as ac:
+            await ac.post("/api/auth/login", json={"username": "admin", "password": "lels1234"})
+            resp = await ac.get("/api/conversations?limit=0")
+            assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_clear_conversations_unauthenticated(self, client):
+        resp = await client.delete("/api/conversations")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_clear_conversations_success(self, auth_client):
+        with patch("main.clear_history", new_callable=AsyncMock) as mock_clear:
+            resp = await auth_client.delete("/api/conversations")
+            assert resp.status_code == 200
+            assert resp.json()["cleared"] is True
+            mock_clear.assert_called_once_with("admin")
+
+    @pytest.mark.asyncio
+    async def test_trigger_summarize_unauthenticated(self, client):
+        resp = await client.post("/api/conversations/summarize")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_trigger_summarize_success(self, auth_client):
+        with patch("summarizer.generate_summaries", new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = [{"period": "daily", "status": "ok"}]
+            resp = await auth_client.post("/api/conversations/summarize")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data["summarized"]) == 1
+            assert data["summarized"][0]["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_chat_persists_history(self, auth_client):
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
+                with patch("main.save_turn", new_callable=AsyncMock) as mock_save:
+                    with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
+                        mock_history.return_value = []
+                        mock_count.return_value = 0
+                        mock_chat.return_value = "Hello!"
+                        resp = await auth_client.post("/api/chat", json={
+                            "messages": [{"role": "user", "content": "Hi"}]
+                        })
+                        assert resp.status_code == 200
+                        assert mock_save.call_count == 2
+                        save_calls = mock_save.call_args_list
+                        assert save_calls[0][0][1] == "user"
+                        assert save_calls[0][0][2] == "Hi"
+                        assert save_calls[1][0][1] == "assistant"
+                        assert save_calls[1][0][2] == "Hello!"
+
+    @pytest.mark.asyncio
+    async def test_chat_includes_history(self, auth_client):
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
+                with patch("main.save_turn", new_callable=AsyncMock):
+                    with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
+                        mock_history.return_value = [
+                            {"role": "user", "content": "Previous", "tool_calls": None, "tool_call_id": None, "turn_order": 1}
+                        ]
+                        mock_count.return_value = 1
+                        mock_chat.return_value = "Response"
+                        resp = await auth_client.post("/api/chat", json={
+                            "messages": [{"role": "user", "content": "Current"}]
+                        })
+                        assert resp.status_code == 200
+                        messages_arg = mock_chat.call_args[0][0]
+                        assert len(messages_arg) == 2
+                        assert messages_arg[0]["content"] == "Previous"
+                        assert messages_arg[1].content == "Current"
+
+    @pytest.mark.asyncio
+    async def test_chat_turn_order_increments(self, auth_client):
+        with patch("main.get_history", new_callable=AsyncMock) as mock_history:
+            with patch("main.get_turn_count", new_callable=AsyncMock) as mock_count:
+                with patch("main.save_turn", new_callable=AsyncMock) as mock_save:
+                    with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
+                        mock_history.return_value = []
+                        mock_count.return_value = 5
+                        mock_chat.return_value = "Reply"
+                        resp = await auth_client.post("/api/chat", json={
+                            "messages": [
+                                {"role": "user", "content": "Msg1"},
+                                {"role": "user", "content": "Msg2"},
+                            ]
+                        })
+                        assert resp.status_code == 200
+                        save_calls = mock_save.call_args_list
+                        assert save_calls[0][0][5] == 6
+                        assert save_calls[1][0][5] == 7
+                        assert save_calls[2][0][5] == 8
