@@ -12,7 +12,7 @@ from typing import Literal
 from dotenv import load_dotenv
 
 from llm import chat, LLMError
-from gcalendar import get_service, auth_flow, list_events, get_today_events, NotAuthenticated
+from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, NotAuthenticated
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 
 load_dotenv()
@@ -57,6 +57,22 @@ class ChatRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class EventCreateRequest(BaseModel):
+    summary: str
+    start: str
+    end: str
+    location: str | None = None
+    description: str | None = None
+
+
+class EventUpdateRequest(BaseModel):
+    summary: str | None = None
+    start: str | None = None
+    end: str | None = None
+    location: str | None = None
+    description: str | None = None
 
 
 @app.post("/api/auth/login")
@@ -133,5 +149,59 @@ async def calendar_week(user: User = Depends(get_current_user)):
         service = get_service()
         events = list_events(service, days=7)
         return {"events": events}
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
+
+
+@app.post("/api/calendar/events")
+async def create_calendar_event(req: EventCreateRequest, user: User = Depends(get_current_user)):
+    try:
+        service = get_service()
+        try:
+            event = create_event(
+                service,
+                req.summary,
+                req.start,
+                req.end,
+                req.location,
+                req.description,
+            )
+            return {"id": event["id"], "status": event.get("status", "confirmed")}
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
+
+
+@app.patch("/api/calendar/events/{event_id}")
+async def edit_calendar_event(event_id: str, req: EventUpdateRequest, user: User = Depends(get_current_user)):
+    try:
+        service = get_service()
+        try:
+            updated = edit_event(
+                service,
+                event_id,
+                req.summary,
+                req.start,
+                req.end,
+                req.location,
+                req.description,
+            )
+            return {"id": updated["id"]}
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
+
+
+@app.delete("/api/calendar/events/{event_id}")
+async def delete_calendar_event(event_id: str, user: User = Depends(get_current_user)):
+    try:
+        service = get_service()
+        try:
+            delete_event(service, event_id)
+            return {"deleted": event_id}
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
     except NotAuthenticated as e:
         return {"auth_required": True, "auth_url": e.auth_url}

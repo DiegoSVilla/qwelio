@@ -438,3 +438,197 @@ class TestRateLimiter:
 
     def test_verify_password_unknown_empty(self):
         assert auth.verify_password("nobody", "") is False
+
+
+class TestCalendarWriteEndpoints:
+    @pytest.mark.asyncio
+    async def test_create_event_unauthenticated(self, client):
+        resp = await client.post("/api/calendar/events", json={
+            "summary": "Meeting",
+            "start": "2025-01-01T10:00:00Z",
+            "end": "2025-01-01T11:00:00Z",
+        })
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_create_event_missing_fields(self, auth_client):
+        resp = await auth_client.post("/api/calendar/events", json={
+            "summary": "Meeting",
+        })
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_event_success(self, auth_client):
+        mock_service = MagicMock()
+        mock_event = {"id": "evt-123", "status": "confirmed"}
+        with patch("main.get_service", return_value=mock_service):
+            with patch("main.create_event", return_value=mock_event):
+                resp = await auth_client.post("/api/calendar/events", json={
+                    "summary": "Meeting",
+                    "start": "2025-01-01T10:00:00Z",
+                    "end": "2025-01-01T11:00:00Z",
+                    "location": "Room A",
+                    "description": "Sync up",
+                })
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["id"] == "evt-123"
+                assert data["status"] == "confirmed"
+
+    @pytest.mark.asyncio
+    async def test_create_event_duplicate(self, auth_client):
+        mock_service = MagicMock()
+        with patch("main.get_service", return_value=mock_service):
+            with patch("main.create_event", side_effect=ValueError("Duplicate event: Meeting")):
+                resp = await auth_client.post("/api/calendar/events", json={
+                    "summary": "Meeting",
+                    "start": "2025-01-01T10:00:00Z",
+                    "end": "2025-01-01T11:00:00Z",
+                })
+                assert resp.status_code == 409
+                assert "Duplicate" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_create_event_not_auth(self, auth_client):
+        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+            resp = await auth_client.post("/api/calendar/events", json={
+                "summary": "Meeting",
+                "start": "2025-01-01T10:00:00Z",
+                "end": "2025-01-01T11:00:00Z",
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["auth_required"] is True
+
+    @pytest.mark.asyncio
+    async def test_edit_event_unauthenticated(self, client):
+        resp = await client.patch("/api/calendar/events/evt-123", json={
+            "summary": "Updated Meeting",
+        })
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_edit_event_success(self, auth_client):
+        mock_service = MagicMock()
+        mock_updated = {"id": "evt-123"}
+        with patch("main.get_service", return_value=mock_service):
+            with patch("main.edit_event", return_value=mock_updated):
+                resp = await auth_client.patch("/api/calendar/events/evt-123", json={
+                    "summary": "Updated Meeting",
+                    "location": "Room B",
+                })
+                assert resp.status_code == 200
+                assert resp.json()["id"] == "evt-123"
+
+    @pytest.mark.asyncio
+    async def test_edit_event_not_found(self, auth_client):
+        mock_service = MagicMock()
+        with patch("main.get_service", return_value=mock_service):
+            with patch("main.edit_event", side_effect=KeyError("Event evt-999 not found")):
+                resp = await auth_client.patch("/api/calendar/events/evt-999", json={
+                    "summary": "Updated",
+                })
+                assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_edit_event_not_auth(self, auth_client):
+        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+            resp = await auth_client.patch("/api/calendar/events/evt-123", json={
+                "summary": "Updated",
+            })
+            assert resp.status_code == 200
+            assert resp.json()["auth_required"] is True
+
+    @pytest.mark.asyncio
+    async def test_delete_event_unauthenticated(self, client):
+        resp = await client.delete("/api/calendar/events/evt-123")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_delete_event_success(self, auth_client):
+        mock_service = MagicMock()
+        with patch("main.get_service", return_value=mock_service):
+            with patch("main.delete_event") as mock_delete:
+                resp = await auth_client.delete("/api/calendar/events/evt-123")
+                assert resp.status_code == 200
+                assert resp.json()["deleted"] == "evt-123"
+                mock_delete.assert_called_once_with(mock_service, "evt-123")
+
+    @pytest.mark.asyncio
+    async def test_delete_event_not_found(self, auth_client):
+        mock_service = MagicMock()
+        with patch("main.get_service", return_value=mock_service):
+            with patch("main.delete_event", side_effect=KeyError("Event evt-999 not found")):
+                resp = await auth_client.delete("/api/calendar/events/evt-999")
+                assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_event_not_auth(self, auth_client):
+        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+            resp = await auth_client.delete("/api/calendar/events/evt-123")
+            assert resp.status_code == 200
+            assert resp.json()["auth_required"] is True
+
+
+class TestGcalendarWriteFunctions:
+    def test_to_gapi_event_with_datetime(self):
+        from gcalendar import _to_gapi_event
+        result = _to_gapi_event("Meeting", "2025-01-01T10:00:00Z", "2025-01-01T11:00:00Z", "Room A", "Sync")
+        assert result["summary"] == "Meeting"
+        assert result["start"] == {"dateTime": "2025-01-01T10:00:00Z"}
+        assert result["end"] == {"dateTime": "2025-01-01T11:00:00Z"}
+        assert result["location"] == "Room A"
+        assert result["description"] == "Sync"
+
+    def test_to_gapi_event_all_day(self):
+        from gcalendar import _to_gapi_event
+        result = _to_gapi_event("Holiday", "2025-01-01", "2025-01-02")
+        assert result["start"] == {"date": "2025-01-01"}
+        assert result["end"] == {"date": "2025-01-02"}
+        assert "location" not in result
+        assert "description" not in result
+
+    def test_create_event_success(self):
+        from gcalendar import create_event
+        mock_service = MagicMock()
+        mock_service.events.return_value.list.return_value.execute.return_value = {"items": []}
+        mock_service.events.return_value.insert.return_value.execute.return_value = {"id": "evt-123", "status": "confirmed"}
+        result = create_event(mock_service, "Meeting", "2025-01-01T10:00:00Z", "2025-01-01T11:00:00Z")
+        assert result["id"] == "evt-123"
+
+    def test_create_event_duplicate(self):
+        from gcalendar import create_event
+        mock_service = MagicMock()
+        mock_service.events.return_value.list.return_value.execute.return_value = {
+            "items": [{"summary": "Meeting", "start": {"dateTime": "2025-01-01T10:00:00Z"}}]
+        }
+        with pytest.raises(ValueError, match="Duplicate"):
+            create_event(mock_service, "meeting", "2025-01-01T10:00:00Z", "2025-01-01T11:00:00Z")
+
+    def test_edit_event_success(self):
+        from gcalendar import edit_event
+        mock_service = MagicMock()
+        mock_service.events.return_value.get.return_value.execute.return_value = {"id": "evt-123", "summary": "Old"}
+        mock_service.events.return_value.update.return_value.execute.return_value = {"id": "evt-123", "summary": "New"}
+        result = edit_event(mock_service, "evt-123", summary="New")
+        assert result["summary"] == "New"
+
+    def test_edit_event_not_found(self):
+        from gcalendar import edit_event
+        mock_service = MagicMock()
+        mock_service.events.return_value.get.return_value.execute.side_effect = Exception("Not found")
+        with pytest.raises(KeyError, match="not found"):
+            edit_event(mock_service, "evt-999", summary="New")
+
+    def test_delete_event_success(self):
+        from gcalendar import delete_event
+        mock_service = MagicMock()
+        delete_event(mock_service, "evt-123")
+        mock_service.events.return_value.delete.assert_called_once()
+
+    def test_delete_event_not_found(self):
+        from gcalendar import delete_event
+        mock_service = MagicMock()
+        mock_service.events.return_value.delete.return_value.execute.side_effect = Exception("Not found")
+        with pytest.raises(KeyError, match="not found"):
+            delete_event(mock_service, "evt-999")

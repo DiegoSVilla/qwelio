@@ -7,7 +7,7 @@ import os
 import json
 import pathlib
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 TOKEN_PATH = pathlib.Path(__file__).parent / ".calendar_token.json"
 
 
@@ -120,3 +120,60 @@ def get_today_events(service):
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + timedelta(days=1)
     return _fetch_events(service, start.isoformat(), end.isoformat())
+
+
+def _to_gapi_event(summary, start, end, location=None, description=None):
+    event = {"summary": summary}
+    if "T" in start:
+        event["start"] = {"dateTime": start}
+    else:
+        event["start"] = {"date": start}
+    if "T" in end:
+        event["end"] = {"dateTime": end}
+    else:
+        event["end"] = {"date": end}
+    if location is not None:
+        event["location"] = location
+    if description is not None:
+        event["description"] = description
+    return event
+
+
+def create_event(service, summary, start, end, location=None, description=None):
+    existing = _fetch_events(
+        service,
+        start if isinstance(start, str) else start.isoformat(),
+        end if isinstance(end, str) else end.isoformat(),
+    )
+    for e in existing:
+        if e["summary"].lower() == summary.lower():
+            raise ValueError(f"Duplicate event: {e['summary']}")
+    event_body = _to_gapi_event(summary, start, end, location, description)
+    created = service.events().insert(calendarId="primary", body=event_body).execute()
+    return created
+
+
+def edit_event(service, event_id, summary=None, start=None, end=None, location=None, description=None):
+    try:
+        existing = service.events().get(calendarId="primary", eventId=event_id).execute()
+    except Exception:
+        raise KeyError(f"Event {event_id} not found")
+    if summary is not None:
+        existing["summary"] = summary
+    if start is not None:
+        existing["start"] = {"dateTime": start} if "T" in start else {"date": start}
+    if end is not None:
+        existing["end"] = {"dateTime": end} if "T" in end else {"date": end}
+    if location is not None:
+        existing["location"] = location
+    if description is not None:
+        existing["description"] = description
+    updated = service.events().update(calendarId="primary", eventId=event_id, body=existing).execute()
+    return updated
+
+
+def delete_event(service, event_id):
+    try:
+        service.events().delete(calendarId="primary", eventId=event_id).execute()
+    except Exception:
+        raise KeyError(f"Event {event_id} not found")
