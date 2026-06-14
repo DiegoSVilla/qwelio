@@ -1,13 +1,18 @@
+import json
+import os
+
 from openai import AsyncOpenAI, APIConnectionError, RateLimitError, APIStatusError
 from dotenv import load_dotenv
 from pathlib import Path
-import os
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 class LLMError(Exception):
     pass
+
+
+MAX_TOOL_ITERATIONS = int(os.getenv("MAX_TOOL_ITERATIONS", "5"))
 
 
 def _get_client():
@@ -44,3 +49,65 @@ async def chat(messages: list[dict]) -> str:
         raise LLMError(f"Rate limited: {e}")
     except APIStatusError as e:
         raise LLMError(f"API error {e.status_code}: {e.message}")
+
+
+async def chat_with_tools(messages: list[dict], tool_definitions: list[dict]) -> str:
+    """Execute the tool call loop. Never mutates the input messages list."""
+    client = _get_client()
+    model = _get_model()
+
+    working_messages = list(messages)
+
+    for iteration in range(MAX_TOOL_ITERATIONS):
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=working_messages,
+            temperature=0.6,
+            tools=tool_definitions,
+        )
+
+        message = resp.choices[0].message
+
+        if message.tool_calls:
+            for tool_call in message.tool_calls:
+                tool_name = tool_call.function.name
+                try:
+                    arguments = json.loads(tool_call.function.arguments)
+                except json.JSONDecodeError:
+                    arguments = {}
+                    result = f"Error: Invalid JSON in tool arguments for {tool_name}"
+
+                    working_messages.append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [tool_call.model_dump()],
+                    })
+                    working_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": result,
+                    })
+                    continue
+
+                try:
+                    from tools import ToolRegistry
+                    result = await ToolRegistry.execute(tool_name, arguments)
+                except KeyError as e:
+                    result = f"Error: {e}"
+                except Exception as e:
+                    result = f"Error: {e}"
+
+                working_messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [tool_call.model_dump()],
+                })
+                working_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result,
+                })
+        else:
+            return message.content or ""
+
+    raise LLMError(f"Tool loop exceeded {MAX_TOOL_ITERATIONS} iterations")

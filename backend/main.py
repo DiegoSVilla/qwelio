@@ -8,17 +8,19 @@ from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Literal
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 from dotenv import load_dotenv
 
-from llm import chat, LLMError
+from llm import chat_with_tools, LLMError
 from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, NotAuthenticated
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
+from tools import ToolRegistry
 
 load_dotenv()
 
 app = FastAPI(title="Qwelio")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,8 +83,14 @@ class EventCreateRequest(BaseModel):
     def validate_end_after_start(cls, v: str, info) -> str:
         start = info.data.get("start")
         if start:
-            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else datetime.fromisoformat(start + "T00:00:00")
-            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else datetime.fromisoformat(v + "T00:00:00")
+            start_str = start.replace("Z", "+00:00") if "T" in start else start + "T00:00:00+00:00"
+            end_str = v.replace("Z", "+00:00") if "T" in v else v + "T00:00:00+00:00"
+            start_dt = datetime.fromisoformat(start_str)
+            end_dt = datetime.fromisoformat(end_str)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
             if end_dt <= start_dt:
                 raise ValueError("end must be after start")
         return v
@@ -113,11 +121,125 @@ class EventUpdateRequest(BaseModel):
             return v
         start = info.data.get("start")
         if start:
-            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else datetime.fromisoformat(start + "T00:00:00")
-            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else datetime.fromisoformat(v + "T00:00:00")
+            start_str = start.replace("Z", "+00:00") if "T" in start else start + "T00:00:00+00:00"
+            end_str = v.replace("Z", "+00:00") if "T" in v else v + "T00:00:00+00:00"
+            start_dt = datetime.fromisoformat(start_str)
+            end_dt = datetime.fromisoformat(end_str)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
             if end_dt <= start_dt:
                 raise ValueError("end must be after start")
         return v
+
+
+def _do_create(summary, start, end, location=None, description=None):
+    service = get_service()
+    return create_event(service, summary, start, end, location, description)
+
+
+def _do_edit(event_id, summary=None, start=None, end=None, location=None, description=None):
+    service = get_service()
+    return edit_event(service, event_id, summary, start, end, location, description)
+
+
+def _do_delete(event_id):
+    service = get_service()
+    delete_event(service, event_id)
+    return {"deleted": event_id}
+
+
+def _do_list(time_min=None, time_max=None, days=7):
+    service = get_service()
+    if time_min and time_max:
+        from gcalendar import _fetch_events
+        return _fetch_events(service, time_min, time_max)
+    return list_events(service, days=days)
+
+
+def _do_today():
+    service = get_service()
+    return get_today_events(service)
+
+
+def _register_tools():
+    ToolRegistry.register(
+        "create_event",
+        "Create a new calendar event",
+        {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "description": "Event title"},
+                "start": {"type": "string", "description": "Start time in ISO 8601 format"},
+                "end": {"type": "string", "description": "End time in ISO 8601 format"},
+                "location": {"type": "string", "description": "Event location (optional)"},
+                "description": {"type": "string", "description": "Event description (optional)"},
+            },
+            "required": ["summary", "start", "end"],
+        },
+        _do_create,
+    )
+
+    ToolRegistry.register(
+        "edit_event",
+        "Update an existing calendar event",
+        {
+            "type": "object",
+            "properties": {
+                "event_id": {"type": "string", "description": "Event ID to update"},
+                "summary": {"type": "string", "description": "New event title (optional)"},
+                "start": {"type": "string", "description": "New start time in ISO 8601 (optional)"},
+                "end": {"type": "string", "description": "New end time in ISO 8601 (optional)"},
+                "location": {"type": "string", "description": "New location (optional)"},
+                "description": {"type": "string", "description": "New description (optional)"},
+            },
+            "required": ["event_id"],
+        },
+        _do_edit,
+    )
+
+    ToolRegistry.register(
+        "delete_event",
+        "Delete a calendar event",
+        {
+            "type": "object",
+            "properties": {
+                "event_id": {"type": "string", "description": "Event ID to delete"},
+            },
+            "required": ["event_id"],
+        },
+        _do_delete,
+    )
+
+    ToolRegistry.register(
+        "list_events",
+        "List calendar events for a date range",
+        {
+            "type": "object",
+            "properties": {
+                "time_min": {"type": "string", "description": "Start of range in ISO 8601 (optional)"},
+                "time_max": {"type": "string", "description": "End of range in ISO 8601 (optional)"},
+                "days": {"type": "integer", "description": "Number of days from now (default 7, used if time_min not provided)"},
+            },
+            "required": [],
+        },
+        _do_list,
+    )
+
+    ToolRegistry.register(
+        "get_today_events",
+        "Get today's calendar events",
+        {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        _do_today,
+    )
+
+
+_register_tools()
 
 
 @app.post("/api/auth/login")
@@ -146,7 +268,8 @@ async def api_me(user: User = Depends(get_current_user)):
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
     try:
-        content = await chat(req.messages)
+        tool_defs = ToolRegistry.get_definitions()
+        content = await chat_with_tools(req.messages, tool_defs)
         return {"content": content}
     except LLMError as e:
         return {"error": str(e)}

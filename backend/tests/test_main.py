@@ -149,7 +149,7 @@ class TestProtectedRoutes:
 
     @pytest.mark.asyncio
     async def test_chat_authenticated(self, auth_client):
-        with patch("main.chat", new_callable=AsyncMock) as mock_chat:
+        with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = "Hello!"
             resp = await auth_client.post("/api/chat", json={
                 "messages": [{"role": "user", "content": "Hi"}]
@@ -333,7 +333,7 @@ class TestChatValidation:
     @pytest.mark.asyncio
     async def test_chat_llm_error(self, auth_client):
         from llm import LLMError
-        with patch("main.chat", new_callable=AsyncMock, side_effect=LLMError("API down")):
+        with patch("main.chat_with_tools", new_callable=AsyncMock, side_effect=LLMError("API down")):
             resp = await auth_client.post("/api/chat", json={
                 "messages": [{"role": "user", "content": "Hi"}]
             })
@@ -538,12 +538,16 @@ class TestCalendarWriteEndpoints:
 
     @pytest.mark.asyncio
     async def test_create_event_mixed_date_datetime(self, auth_client):
-        resp = await auth_client.post("/api/calendar/events", json={
-            "summary": "Test",
-            "start": "2025-01-01",
-            "end": "2025-01-01T10:00:00Z",
-        })
-        assert resp.status_code == 201
+        mock_service = MagicMock()
+        mock_event = {"id": "evt-mixed", "status": "confirmed"}
+        with patch("main.get_service", return_value=mock_service):
+            with patch("main.create_event", return_value=mock_event):
+                resp = await auth_client.post("/api/calendar/events", json={
+                    "summary": "Test",
+                    "start": "2025-01-01",
+                    "end": "2025-01-01T10:00:00Z",
+                })
+                assert resp.status_code == 201
 
     @pytest.mark.asyncio
     async def test_edit_event_invalid_iso8601(self, auth_client):
