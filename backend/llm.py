@@ -99,8 +99,10 @@ async def chat_with_tools(messages: list[dict], tool_definitions: list[dict]) ->
                     result = await ToolRegistry.execute(tool_name, arguments)
                 except KeyError as e:
                     result = f"Error: {e}"
-                except Exception as e:
+                except LLMError as e:
                     result = f"Error: {e}"
+                except Exception:
+                    result = f"Error: Tool {tool_name} failed"
 
                 tool_results.append((tool_call.id, result))
 

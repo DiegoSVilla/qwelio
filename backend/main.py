@@ -136,31 +136,50 @@ class EventUpdateRequest(BaseModel):
 
 def _do_create(summary, start, end, location=None, description=None):
     EventCreateRequest(summary=summary, start=start, end=end, location=location, description=description)
-    service = get_service()
+    try:
+        service = get_service()
+    except NotAuthenticated:
+        return {"error": "Calendar authentication expired. Please re-authorize."}
     return create_event(service, summary, start, end, location, description)
 
 
 def _do_edit(event_id, summary=None, start=None, end=None, location=None, description=None):
+    if not event_id:
+        raise ValueError("event_id is required")
     EventUpdateRequest(summary=summary, start=start, end=end, location=location, description=description)
-    service = get_service()
+    try:
+        service = get_service()
+    except NotAuthenticated:
+        return {"error": "Calendar authentication expired. Please re-authorize."}
     return edit_event(service, event_id, summary, start, end, location, description)
 
 
 def _do_delete(event_id):
-    service = get_service()
+    if not event_id:
+        raise ValueError("event_id is required")
+    try:
+        service = get_service()
+    except NotAuthenticated:
+        return {"error": "Calendar authentication expired. Please re-authorize."}
     delete_event(service, event_id)
     return {"deleted": event_id}
 
 
 def _do_list(time_min=None, time_max=None, days=7):
-    service = get_service()
+    try:
+        service = get_service()
+    except NotAuthenticated:
+        return {"error": "Calendar authentication expired. Please re-authorize."}
     if time_min and time_max:
         return _fetch_events(service, time_min, time_max)
     return list_events(service, days=days)
 
 
 def _do_today():
-    service = get_service()
+    try:
+        service = get_service()
+    except NotAuthenticated:
+        return {"error": "Calendar authentication expired. Please re-authorize."}
     return get_today_events(service)
 
 
