@@ -81,8 +81,8 @@ class EventCreateRequest(BaseModel):
     def validate_end_after_start(cls, v: str, info) -> str:
         start = info.data.get("start")
         if start:
-            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else date.fromisoformat(start)
-            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else date.fromisoformat(v)
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else datetime.fromisoformat(start + "T00:00:00")
+            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else datetime.fromisoformat(v + "T00:00:00")
             if end_dt <= start_dt:
                 raise ValueError("end must be after start")
         return v
@@ -113,8 +113,8 @@ class EventUpdateRequest(BaseModel):
             return v
         start = info.data.get("start")
         if start:
-            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else date.fromisoformat(start)
-            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else date.fromisoformat(v)
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else datetime.fromisoformat(start + "T00:00:00")
+            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else datetime.fromisoformat(v + "T00:00:00")
             if end_dt <= start_dt:
                 raise ValueError("end must be after start")
         return v

@@ -501,6 +501,66 @@ class TestCalendarWriteEndpoints:
             assert data["auth_required"] is True
 
     @pytest.mark.asyncio
+    async def test_create_event_invalid_iso8601(self, auth_client):
+        resp = await auth_client.post("/api/calendar/events", json={
+            "summary": "Test",
+            "start": "not-a-date",
+            "end": "2025-01-01T11:00:00Z",
+        })
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_event_end_before_start(self, auth_client):
+        resp = await auth_client.post("/api/calendar/events", json={
+            "summary": "Test",
+            "start": "2025-01-01T12:00:00Z",
+            "end": "2025-01-01T10:00:00Z",
+        })
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_event_empty_summary(self, auth_client):
+        resp = await auth_client.post("/api/calendar/events", json={
+            "summary": "",
+            "start": "2025-01-01T10:00:00Z",
+            "end": "2025-01-01T11:00:00Z",
+        })
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_event_summary_too_long(self, auth_client):
+        resp = await auth_client.post("/api/calendar/events", json={
+            "summary": "x" * 1025,
+            "start": "2025-01-01T10:00:00Z",
+            "end": "2025-01-01T11:00:00Z",
+        })
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_event_mixed_date_datetime(self, auth_client):
+        resp = await auth_client.post("/api/calendar/events", json={
+            "summary": "Test",
+            "start": "2025-01-01",
+            "end": "2025-01-01T10:00:00Z",
+        })
+        assert resp.status_code == 201
+
+    @pytest.mark.asyncio
+    async def test_edit_event_invalid_iso8601(self, auth_client):
+        resp = await auth_client.patch("/api/calendar/events/evt-123", json={
+            "start": "not-a-date",
+        })
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_edit_event_end_before_start(self, auth_client):
+        resp = await auth_client.patch("/api/calendar/events/evt-123", json={
+            "start": "2025-01-01T12:00:00Z",
+            "end": "2025-01-01T10:00:00Z",
+        })
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
     async def test_edit_event_unauthenticated(self, client):
         resp = await client.patch("/api/calendar/events/evt-123", json={
             "summary": "Updated Meeting",
