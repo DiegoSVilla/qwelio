@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from llm import chat, LLMError
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 _last_summarize: dict[str, float] = {}
-_SUMMARIZE_COOLDOWN = 300
+_SUMMARIZE_COOLDOWN = int(os.getenv("SUMMARIZE_COOLDOWN_SECONDS", "300"))
 
 
 def _build_summary_prompt(messages: list[dict], period: str, period_start: str, period_end: str) -> list[dict]:

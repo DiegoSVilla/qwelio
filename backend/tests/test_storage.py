@@ -148,7 +148,7 @@ class TestSummaries:
 
         summaries = await storage.get_summaries("user1")
         assert len(summaries["monthly"]) == 1
-        assert summaries["monthly"][0][3] == "January summary"
+        assert summaries["monthly"][0]["content"] == "January summary"
 
     @pytest.mark.asyncio
     async def test_monthly_capped_at_12(self, initialized_db):
@@ -193,8 +193,8 @@ class TestSummaries:
 
         s1 = await storage.get_summaries("user1")
         s2 = await storage.get_summaries("user2")
-        assert s1["daily"][0][3] == "S1"
-        assert s2["daily"][0][3] == "S2"
+        assert s1["daily"][0]["content"] == "S1"
+        assert s2["daily"][0]["content"] == "S2"
 
 
 class TestGetPeriodMessages:
@@ -243,6 +243,58 @@ class TestPendingSummaries:
         pending = await storage.get_pending_summaries("user1")
         daily_pending = [p for p in pending if p[0] == "daily"]
         assert (ds, de) not in [(p[1], p[2]) for p in daily_pending]
+
+
+class TestSaveTurns:
+    @pytest.mark.asyncio
+    async def test_saves_multiple_turns_atomically(self, initialized_db):
+        turns = [
+            ("user", "Hello", None, None),
+            ("assistant", None, [{"id": "call-1"}], None),
+            ("tool", "OK", None, "call-1"),
+            ("assistant", "Done", None, None),
+        ]
+        orders = await storage.save_turns("user1", turns)
+        assert len(orders) == 4
+        assert orders == [1, 2, 3, 4]
+
+        history = await storage.get_history("user1")
+        assert len(history) == 4
+        assert history[0]["role"] == "user"
+        assert history[1]["tool_calls"] == [{"id": "call-1"}]
+        assert history[2]["tool_call_id"] == "call-1"
+
+    @pytest.mark.asyncio
+    async def test_counter_increments_across_calls(self, initialized_db):
+        await storage.save_turns("user1", [("user", "First", None, None)])
+        await storage.save_turns("user1", [("assistant", "Reply", None, None)])
+
+        history = await storage.get_history("user1")
+        assert len(history) == 2
+        assert history[0]["turn_order"] == 1
+        assert history[1]["turn_order"] == 2
+
+    @pytest.mark.asyncio
+    async def test_counter_independent_per_user(self, initialized_db):
+        await storage.save_turns("user1", [("user", "A", None, None)])
+        await storage.save_turns("user2", [("user", "B", None, None)])
+
+        h1 = await storage.get_history("user1")
+        h2 = await storage.get_history("user2")
+        assert h1[0]["turn_order"] == 1
+        assert h2[0]["turn_order"] == 1
+
+
+class TestCounterResetOnClear:
+    @pytest.mark.asyncio
+    async def test_clear_resets_counter(self, initialized_db):
+        await storage.save_turns("user1", [("user", "Msg", None, None)])
+        await storage.clear_history("user1")
+
+        await storage.save_turns("user1", [("user", "New", None, None)])
+        history = await storage.get_history("user1")
+        assert len(history) == 1
+        assert history[0]["turn_order"] == 1
 
 
 class TestCleanupOldHistory:

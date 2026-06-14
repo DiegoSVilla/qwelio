@@ -17,7 +17,8 @@ from llm import chat_with_tools, LLMError
 from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, _fetch_events, NotAuthenticated
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 from tools import ToolRegistry
-from storage import init_db, save_turn, get_history, next_turn_order, clear_history, cleanup_old_history, get_summaries
+from storage import init_db, save_turns, get_history, clear_history, cleanup_old_history, get_summaries
+from storage import DB_PATH
 
 load_dotenv()
 
@@ -30,6 +31,10 @@ async def lifespan(app: FastAPI):
     await init_db()
     await cleanup_old_history(HISTORY_RETENTION_DAYS)
     yield
+    import aiosqlite
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        await conn.commit()
 
 
 app = FastAPI(title="Qwelio", lifespan=lifespan)
@@ -309,18 +314,14 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
     try:
         history = await get_history(user.id, limit=MAX_CONTEXT_TURNS)
         clean_history = [{k: v for k, v in h.items() if k != "turn_order"} for h in history]
-        messages = clean_history + req.messages
+        messages = clean_history + [m.model_dump() for m in req.messages]
         tool_defs = ToolRegistry.get_definitions()
         content, new_msgs = await chat_with_tools(messages, tool_defs)
 
-        turn_order = await next_turn_order(user.id)
-        for msg in req.messages:
-            await save_turn(user.id, msg.role, msg.content, None, None, turn_order)
-            turn_order += 1
+        turns = [(m.role, m.content, None, None) for m in req.messages]
         for msg in new_msgs:
-            tc = msg.get("tool_calls")
-            await save_turn(user.id, msg["role"], msg.get("content"), tc, msg.get("tool_call_id"), turn_order)
-            turn_order += 1
+            turns.append((msg["role"], msg.get("content"), msg.get("tool_calls"), msg.get("tool_call_id")))
+        await save_turns(user.id, turns)
 
         return {"content": content}
     except LLMError as e:

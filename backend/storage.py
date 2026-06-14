@@ -54,23 +54,32 @@ async def save_turn(user_id: str, role: str, content: str | None, tool_calls: li
         await conn.commit()
 
 
-async def next_turn_order(user_id: str) -> int:
+async def save_turns(user_id: str, turns: list[tuple[str, str | None, list | None, str | None]]) -> list[int]:
+    """Atomically save multiple turns with auto-incremented turn_order. Returns assigned turn_orders."""
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "INSERT OR IGNORE INTO _turn_counter (user_id, counter) VALUES (?, 0)",
             (user_id,),
         )
-        await conn.execute(
-            "UPDATE _turn_counter SET counter = counter + 1 WHERE user_id = ?",
-            (user_id,),
-        )
-        cursor = await conn.execute(
-            "SELECT counter FROM _turn_counter WHERE user_id = ?",
-            (user_id,),
-        )
-        row = await cursor.fetchone()
+        orders = []
+        for role, content, tool_calls, tool_call_id in turns:
+            await conn.execute(
+                "UPDATE _turn_counter SET counter = counter + 1 WHERE user_id = ?",
+                (user_id,),
+            )
+            cursor = await conn.execute(
+                "SELECT counter FROM _turn_counter WHERE user_id = ?",
+                (user_id,),
+            )
+            row = await cursor.fetchone()
+            to = row[0]
+            orders.append(to)
+            await conn.execute(
+                "INSERT INTO conversations (user_id, role, content, tool_calls, tool_call_id, turn_order) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, role, content, json.dumps(tool_calls) if tool_calls else None, tool_call_id, to),
+            )
         await conn.commit()
-    return row[0]
+    return orders
 
 
 async def get_history(user_id: str, limit: int = 20) -> list[dict]:
@@ -103,6 +112,7 @@ async def clear_history(user_id: str):
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("DELETE FROM conversations WHERE user_id = ?", (user_id,))
         await conn.execute("DELETE FROM summaries WHERE user_id = ?", (user_id,))
+        await conn.execute("DELETE FROM _turn_counter WHERE user_id = ?", (user_id,))
         await conn.commit()
 
 
@@ -132,10 +142,13 @@ async def get_summaries(user_id: str) -> dict:
     monthly = [r for r in rows if r[0] == "monthly"]
     weekly = [r for r in rows if r[0] == "weekly"]
     daily = [r for r in rows if r[0] == "daily"]
+    def _to_dict(r):
+        return {"period": r[0], "period_start": r[1], "period_end": r[2], "content": r[3]}
+
     return {
-        "monthly": monthly[:12],
-        "weekly": weekly[:4],
-        "daily": daily[:7],
+        "monthly": [_to_dict(r) for r in monthly[:12]],
+        "weekly": [_to_dict(r) for r in weekly[:4]],
+        "daily": [_to_dict(r) for r in daily[:7]],
     }
 
 
@@ -177,7 +190,7 @@ async def get_pending_summaries(user_id: str) -> list[dict]:
             target_year -= 1
         ms_dt = today_start.replace(year=target_year, month=target_month, day=1)
         last_day = calendar.monthrange(target_year, target_month)[1]
-        me_dt = ms_dt.replace(day=last_day, hour=23, minute=59, second=59)
+        me_dt = ms_dt.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)
         ms = ms_dt.isoformat()
         me = me_dt.isoformat()
         if ("monthly", ms, me) not in existing:
