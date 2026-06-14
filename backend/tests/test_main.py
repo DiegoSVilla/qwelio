@@ -435,3 +435,6 @@ class TestRateLimiter:
 
     def test_verify_password_empty_string(self):
         assert auth.verify_password("admin", "") is False
+
+    def test_verify_password_unknown_empty(self):
+        assert auth.verify_password("nobody", "") is False

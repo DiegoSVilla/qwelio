@@ -73,6 +73,6 @@ def get_current_user(request: Request) -> User:
 
 def verify_password(username: str, password: str) -> bool:
     stored = HARDCODED_USERS.get(username)
-    if not stored:
-        stored = ""
+    if stored is None:
+        return False
     return hmac.compare_digest(stored, password)
