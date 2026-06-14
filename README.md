@@ -96,7 +96,7 @@ The agent operates as a **retrieval-augmented chat loop**:
 | 2 | Calendar write operations (create/edit/delete) | [#2](https://github.com/DiegoSVilla/qwelio/issues/2) ✅ |
 | 3 | Agentic tool call loop with function calling | [#3](https://github.com/DiegoSVilla/qwelio/issues/3) ✅ |
 | 4 | Dynamic system prompt with calendar context injection | [#4](https://github.com/DiegoSVilla/qwelio/issues/4) |
-| 5 | Conversation history persistence | [#5](https://github.com/DiegoSVilla/qwelio/issues/5) |
+| 5 | Conversation history persistence | [#5](https://github.com/DiegoSVilla/qwelio/issues/5) ✅ |
 | 6 | Configurable inference settings (max context, model) | [#6](https://github.com/DiegoSVilla/qwelio/issues/6) |
 | 7 | Calendar filtering (custom date ranges, keyword, location) | [#7](https://github.com/DiegoSVilla/qwelio/issues/7) |
 | 8 | Time-aware system prompt (timezone, current time) | [#8](https://github.com/DiegoSVilla/qwelio/issues/8) |
