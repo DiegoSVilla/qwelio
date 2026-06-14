@@ -89,10 +89,10 @@ def get_service():
     raise NotAuthenticated(auth_url)
 
 
-def auth_flow(state):
+def auth_flow(callback_url):
     flow = _build_flow()
     flow.redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
-    flow.fetch_token(authorization_response=state)
+    flow.fetch_token(authorization_response=callback_url)
     _save_token(flow.credentials)
     return build("calendar", "v3", credentials=flow.credentials)
 

@@ -5,6 +5,13 @@ import importlib
 from unittest.mock import patch, MagicMock
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    import auth
+    auth.reset_rate_limiter()
+    yield
+
+
 @pytest.fixture
 def token_file(tmp_path):
     """Create a clean token file for tests that need to load credentials."""
@@ -73,13 +80,19 @@ def mock_google_service():
 
 @pytest.fixture
 def app_no_calendar():
-    """FastAPI app fixture without Google Calendar credentials (NotAuthenticated path)."""
+    """FastAPI app fixture without Google Calendar credentials (NotAuthenticated path).
+
+    Note: Uses importlib.reload(main) which is fragile — resets all module-level state.
+    SESSION_SECRET is set in env to prevent file-based secret creation during tests.
+    Consider replacing with a create_app() factory before the test suite grows significantly.
+    """
     with patch.dict(os.environ, {
         "QWEN_API_KEY": "test-key",
         "QWEN_API_URL": "https://test.example.com/v1",
         "MODEL_NAME": "test-model",
         "GOOGLE_CLIENT_ID": "",
         "GOOGLE_CLIENT_SECRET": "",
+        "SESSION_SECRET": "test-secret-for-testing",
     }):
         import main
         importlib.reload(main)
@@ -96,6 +109,7 @@ def app_with_calendar():
         "GOOGLE_CLIENT_ID": "test-client",
         "GOOGLE_CLIENT_SECRET": "test-secret",
         "GOOGLE_REDIRECT_URI": "http://localhost:8000/api/calendar/callback",
+        "SESSION_SECRET": "test-secret-for-testing",
     }):
         import main
         importlib.reload(main)
