@@ -13,7 +13,7 @@ from datetime import datetime, date, timezone
 from dotenv import load_dotenv
 
 from llm import chat_with_tools, LLMError
-from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, NotAuthenticated
+from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, _fetch_events, NotAuthenticated
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 from tools import ToolRegistry
 
@@ -135,11 +135,13 @@ class EventUpdateRequest(BaseModel):
 
 
 def _do_create(summary, start, end, location=None, description=None):
+    EventCreateRequest(summary=summary, start=start, end=end, location=location, description=description)
     service = get_service()
     return create_event(service, summary, start, end, location, description)
 
 
 def _do_edit(event_id, summary=None, start=None, end=None, location=None, description=None):
+    EventUpdateRequest(summary=summary, start=start, end=end, location=location, description=description)
     service = get_service()
     return edit_event(service, event_id, summary, start, end, location, description)
 
@@ -153,7 +155,6 @@ def _do_delete(event_id):
 def _do_list(time_min=None, time_max=None, days=7):
     service = get_service()
     if time_min and time_max:
-        from gcalendar import _fetch_events
         return _fetch_events(service, time_min, time_max)
     return list_events(service, days=days)
 

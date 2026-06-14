@@ -31,9 +31,11 @@ class ToolRegistry:
             raise KeyError(f"Unknown tool: {name}")
         handler = cls._handlers[name]
         try:
-            result = handler(**arguments)
-            if inspect.isawaitable(result):
-                result = await asyncio.wait_for(result, timeout=10.0)
+            if inspect.iscoroutinefunction(handler):
+                result = await asyncio.wait_for(handler(**arguments), timeout=10.0)
+            else:
+                coro = asyncio.to_thread(handler, **arguments)
+                result = await asyncio.wait_for(coro, timeout=10.0)
             return json.dumps(result) if isinstance(result, dict) else str(result)
         except asyncio.TimeoutError:
             raise RuntimeError(f"Tool {name} timed out after 10s")
