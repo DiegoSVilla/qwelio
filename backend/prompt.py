@@ -8,6 +8,12 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 DEFAULT_TIMEZONE = os.getenv("USER_TIMEZONE", "UTC")
+MAX_DESCRIPTION_LENGTH = 200
+
+
+def _truncate(s: str, max_len: int) -> str:
+    """Truncate a string to max_len characters, appending '...' if truncated."""
+    return s[:max_len] + "..." if len(s) > max_len else s
 
 
 def _format_event(e: dict) -> str:
@@ -22,8 +28,9 @@ def _format_event(e: dict) -> str:
         lines[-1] += ")"
     if e.get("location"):
         lines.append(f"    Location: {e['location']}")
-    if e.get("description"):
-        lines.append(f"    Description: {e['description']}")
+    desc = e.get("description")
+    if desc:
+        lines.append(f"    Description: {_truncate(desc, MAX_DESCRIPTION_LENGTH)}")
     return "\n".join(lines)
 
 
@@ -41,6 +48,7 @@ def build_system_prompt(
     today_events: list[dict],
     week_events: list[dict],
     tool_definitions: list[dict],
+    calendar_available: bool = True,
 ) -> str:
     """Build the dynamic system prompt with calendar context and time awareness.
 
@@ -50,10 +58,13 @@ def build_system_prompt(
         today_events: Events for today.
         week_events: Events for the next 7 days.
         tool_definitions: List of tool definition dicts from ToolRegistry.
+        calendar_available: Whether the calendar API was reachable.
 
     Returns:
         The complete system prompt string.
     """
+    calendar_status = "available" if calendar_available else "unavailable (not authenticated or API error)"
+
     tz_section = f"""You are Qwelio, an AI-powered calendar assistant. You help the user manage their schedule, answer questions about their calendar, and perform calendar operations.
 
 # Current Time
@@ -61,6 +72,7 @@ def build_system_prompt(
 - User timezone: {user_timezone}
 
 # Calendar Context
+Calendar access: {calendar_status}
 {_format_events_block("Today's Agenda", today_events)}
 
 {_format_events_block("Upcoming Week (next 7 days)", week_events)}
@@ -83,7 +95,7 @@ You have access to the following tools to interact with the user's calendar:
 - Always reference the current time and calendar context when answering.
 - If the user asks about a specific day, check the calendar events for that day.
 - When creating or editing events, confirm the details with the user before proceeding.
-- If calendar data is unavailable (e.g., not authenticated), inform the user and guide them to authenticate.
+- If calendar data is unavailable, inform the user and guide them to authenticate.
 - Keep responses concise and actionable.
 """
     return tz_section

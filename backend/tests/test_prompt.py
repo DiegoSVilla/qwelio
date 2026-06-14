@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from prompt import build_system_prompt, _format_event, _format_events_block
+from prompt import build_system_prompt, _format_event, _format_events_block, _truncate
 
 
 @pytest.fixture(autouse=True)
@@ -37,6 +37,13 @@ class TestFormatEvent:
         e = {"summary": "Review", "start": "10:00", "end": "11:00", "description": "Code review session"}
         result = _format_event(e)
         assert "Description: Code review session" in result
+
+    def test_event_description_truncated(self):
+        long_desc = "x" * 300
+        e = {"summary": "Review", "start": "10:00", "end": "11:00", "description": long_desc}
+        result = _format_event(e)
+        assert "..." in result
+        assert len(result) < 400
 
     def test_event_no_title(self):
         e = {"start": "10:00", "end": "11:00"}
@@ -140,6 +147,33 @@ class TestBuildSystemPrompt:
     def test_contains_current_time_section(self, now_utc, today_ev, week_ev, tool_defs):
         prompt = build_system_prompt(now_utc, "UTC", today_ev, week_ev, tool_defs)
         assert "Current Time" in prompt
+
+    def test_calendar_available_true(self, now_utc, today_ev, week_ev, tool_defs):
+        prompt = build_system_prompt(now_utc, "UTC", today_ev, week_ev, tool_defs, calendar_available=True)
+        assert "Calendar access: available" in prompt
+
+    def test_calendar_available_false(self, now_utc, today_ev, week_ev, tool_defs):
+        prompt = build_system_prompt(now_utc, "UTC", today_ev, week_ev, tool_defs, calendar_available=False)
+        assert "Calendar access: unavailable" in prompt
+
+    def test_calendar_available_default_true(self, now_utc, today_ev, week_ev, tool_defs):
+        prompt = build_system_prompt(now_utc, "UTC", today_ev, week_ev, tool_defs)
+        assert "Calendar access: available" in prompt
+
+
+# --- _truncate ---
+
+class TestTruncate:
+    def test_no_truncation_when_short(self):
+        assert _truncate("hello", 10) == "hello"
+
+    def test_truncates_when_long(self):
+        result = _truncate("a" * 300, 100)
+        assert result.endswith("...")
+        assert len(result) == 103
+
+    def test_exact_length_no_truncation(self):
+        assert _truncate("abc", 3) == "abc"
 
 
 # --- DEFAULT_TIMEZONE ---

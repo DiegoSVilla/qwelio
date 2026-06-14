@@ -1,3 +1,4 @@
+import asyncio
 import os
 import secrets
 import hmac
@@ -320,18 +321,19 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
         history = await get_history(user.id, limit=MAX_CONTEXT_TURNS)
         clean_history = [{k: v for k, v in h.items() if k != "turn_order"} for h in history]
 
-        # Fetch calendar context
+        # Fetch calendar context (async-safe, graceful degradation)
         today_ev = []
         week_ev = []
+        calendar_available = False
         try:
             service = get_service()
-            today_ev = get_today_events(service)
-            week_ev = list_events(service, days=7)
-        except NotAuthenticated:
+            today_ev = await asyncio.to_thread(get_today_events, service)
+            week_ev = await asyncio.to_thread(list_events, service, days=7)
+            calendar_available = True
+        except Exception:
             pass
 
         # Build system prompt with time + calendar context
-        from datetime import datetime, timezone
         tool_defs = ToolRegistry.get_definitions()
         system_prompt = build_system_prompt(
             current_time_utc=datetime.now(timezone.utc),
@@ -339,6 +341,7 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
             today_events=today_ev,
             week_events=week_ev,
             tool_definitions=tool_defs,
+            calendar_available=calendar_available,
         )
 
         messages = [{"role": "system", "content": system_prompt}] + clean_history + [m.model_dump() for m in req.messages]
