@@ -337,13 +337,14 @@ class TestChatValidation:
     async def test_chat_llm_error(self, auth_client):
         from llm import LLMError
         with patch("main.get_history", new_callable=AsyncMock) as mock_history:
-            with patch("main.chat_with_tools", new_callable=AsyncMock, side_effect=LLMError("API down")):
-                mock_history.return_value = []
-                resp = await auth_client.post("/api/chat", json={
-                    "messages": [{"role": "user", "content": "Hi"}]
-                })
-                assert resp.status_code == 200
-                assert resp.json()["error"] == "API down"
+            with patch("main.save_turns", new_callable=AsyncMock):
+                with patch("main.chat_with_tools", new_callable=AsyncMock, side_effect=LLMError("API down")):
+                    mock_history.return_value = []
+                    resp = await auth_client.post("/api/chat", json={
+                        "messages": [{"role": "user", "content": "Hi"}]
+                    })
+                    assert resp.status_code == 200
+                    assert resp.json()["error"] == "API down"
 
 
 class TestSessionPersistence:

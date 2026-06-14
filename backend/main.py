@@ -3,6 +3,8 @@ import secrets
 import hmac
 from contextlib import asynccontextmanager
 
+import aiosqlite
+
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -31,10 +33,12 @@ async def lifespan(app: FastAPI):
     await init_db()
     await cleanup_old_history(HISTORY_RETENTION_DAYS)
     yield
-    import aiosqlite
-    async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        await conn.commit()
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            await conn.commit()
+    except Exception:
+        pass
 
 
 app = FastAPI(title="Qwelio", lifespan=lifespan)

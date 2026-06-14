@@ -46,6 +46,7 @@ async def init_db():
 
 
 async def save_turn(user_id: str, role: str, content: str | None, tool_calls: list | None, tool_call_id: str | None, turn_order: int):
+    """Save a single turn with explicit turn_order. Used for testing and migrations."""
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "INSERT INTO conversations (user_id, role, content, tool_calls, tool_call_id, turn_order) VALUES (?, ?, ?, ?, ?, ?)",
@@ -152,7 +153,7 @@ async def get_summaries(user_id: str) -> dict:
     }
 
 
-async def get_pending_summaries(user_id: str) -> list[dict]:
+async def get_pending_summaries(user_id: str) -> list[tuple[str, str, str]]:
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.execute(
             """
