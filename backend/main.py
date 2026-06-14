@@ -2,17 +2,18 @@ import os
 import secrets
 import hmac
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
+from datetime import datetime, date
 
 from dotenv import load_dotenv
 
 from llm import chat, LLMError
-from gcalendar import get_service, auth_flow, list_events, get_today_events, NotAuthenticated
+from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, NotAuthenticated
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 
 load_dotenv()
@@ -57,6 +58,66 @@ class ChatRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class EventCreateRequest(BaseModel):
+    summary: str = Field(..., min_length=1, max_length=1024)
+    start: str
+    end: str
+    location: str | None = Field(default=None, max_length=2048)
+    description: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_iso8601(cls, v: str) -> str:
+        if "T" in v:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        else:
+            date.fromisoformat(v)
+        return v
+
+    @field_validator("end")
+    @classmethod
+    def validate_end_after_start(cls, v: str, info) -> str:
+        start = info.data.get("start")
+        if start:
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else datetime.fromisoformat(start + "T00:00:00")
+            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else datetime.fromisoformat(v + "T00:00:00")
+            if end_dt <= start_dt:
+                raise ValueError("end must be after start")
+        return v
+
+
+class EventUpdateRequest(BaseModel):
+    summary: str | None = Field(default=None, min_length=1, max_length=1024)
+    start: str | None = None
+    end: str | None = None
+    location: str | None = Field(default=None, max_length=2048)
+    description: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_iso8601(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if "T" in v:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        else:
+            date.fromisoformat(v)
+        return v
+
+    @field_validator("end")
+    @classmethod
+    def validate_end_after_start(cls, v: str | None, info) -> str | None:
+        if v is None:
+            return v
+        start = info.data.get("start")
+        if start:
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")) if "T" in start else datetime.fromisoformat(start + "T00:00:00")
+            end_dt = datetime.fromisoformat(v.replace("Z", "+00:00")) if "T" in v else datetime.fromisoformat(v + "T00:00:00")
+            if end_dt <= start_dt:
+                raise ValueError("end must be after start")
+        return v
 
 
 @app.post("/api/auth/login")
@@ -133,5 +194,60 @@ async def calendar_week(user: User = Depends(get_current_user)):
         service = get_service()
         events = list_events(service, days=7)
         return {"events": events}
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
+
+
+@app.post("/api/calendar/events")
+async def create_calendar_event(resp: Response, req: EventCreateRequest, user: User = Depends(get_current_user)):
+    try:
+        service = get_service()
+        try:
+            event = create_event(
+                service,
+                req.summary,
+                req.start,
+                req.end,
+                req.location,
+                req.description,
+            )
+            resp.status_code = 201
+            return {"id": event["id"], "status": event.get("status", "confirmed")}
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
+
+
+@app.patch("/api/calendar/events/{event_id}")
+async def edit_calendar_event(event_id: str, req: EventUpdateRequest, user: User = Depends(get_current_user)):
+    try:
+        service = get_service()
+        try:
+            updated = edit_event(
+                service,
+                event_id,
+                req.summary,
+                req.start,
+                req.end,
+                req.location,
+                req.description,
+            )
+            return {"id": updated["id"]}
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
+
+
+@app.delete("/api/calendar/events/{event_id}")
+async def delete_calendar_event(event_id: str, user: User = Depends(get_current_user)):
+    try:
+        service = get_service()
+        try:
+            delete_event(service, event_id)
+            return {"deleted": event_id}
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
     except NotAuthenticated as e:
         return {"auth_required": True, "auth_url": e.auth_url}

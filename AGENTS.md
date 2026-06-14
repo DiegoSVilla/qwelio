@@ -118,7 +118,7 @@ Persist conversation turn (user msg + assistant response + tool calls)
 
 | # | Feature | Issue |
 |---|---------|-------|
-| 1 | User authentication (login/logout/session) | [#1](https://github.com/DiegoSVilla/qwelio/issues/1) |
+| 1 | User authentication (login/logout/session) | [#1](https://github.com/DiegoSVilla/qwelio/issues/1) ✅ |
 | 2 | Calendar write operations (create/edit/delete) | [#2](https://github.com/DiegoSVilla/qwelio/issues/2) |
 | 3 | Agentic tool call loop with function calling | [#3](https://github.com/DiegoSVilla/qwelio/issues/3) |
 | 4 | Dynamic system prompt with calendar context injection | [#4](https://github.com/DiegoSVilla/qwelio/issues/4) |

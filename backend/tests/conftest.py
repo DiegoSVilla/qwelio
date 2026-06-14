@@ -22,7 +22,7 @@ def token_file(tmp_path):
         "token_uri": "https://oauth2.googleapis.com/token",
         "client_id": "test-id",
         "client_secret": "test-secret",
-        "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
+        "scopes": ["https://www.googleapis.com/auth/calendar.events"],
     }))
     tf.chmod(0o600)
     return tf
