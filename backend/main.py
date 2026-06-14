@@ -10,9 +10,9 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 
 from dotenv import load_dotenv
 
@@ -158,6 +158,36 @@ class EventUpdateRequest(BaseModel):
         return v
 
 
+class EventFilterRequest(BaseModel):
+    time_min: str | None = None
+    time_max: str | None = None
+    days: int | None = Field(default=None, ge=1, le=365)
+    keyword: str | None = Field(default=None, max_length=500)
+    location: str | None = Field(default=None, max_length=500)
+
+    @field_validator("time_min", "time_max")
+    @classmethod
+    def validate_iso8601(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if "T" in v:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        else:
+            date.fromisoformat(v)
+        return v
+
+    @model_validator(mode="after")
+    def validate_time_range(self):
+        if self.days is not None and (self.time_min is not None or self.time_max is not None):
+            raise ValueError("Provide either 'days' or 'time_min'/'time_max', not both")
+        if self.time_min and self.time_max:
+            min_dt = datetime.fromisoformat(self.time_min.replace("Z", "+00:00")) if "T" in self.time_min else datetime.fromisoformat(self.time_min + "T00:00:00+00:00")
+            max_dt = datetime.fromisoformat(self.time_max.replace("Z", "+00:00")) if "T" in self.time_max else datetime.fromisoformat(self.time_max + "T00:00:00+00:00")
+            if min_dt >= max_dt:
+                raise ValueError("time_min must be before time_max")
+        return self
+
+
 def _do_create(summary, start, end, location=None, description=None):
     req = EventCreateRequest(summary=summary, start=start, end=end, location=location, description=description)
     try:
@@ -211,6 +241,48 @@ def _do_today():
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
     return get_today_events(service)
+
+
+def _do_filter(time_min=None, time_max=None, days=None, keyword=None, location=None):
+    if days is not None and (days < 1 or days > 365):
+        raise ValueError("days must be between 1 and 365")
+    if time_min:
+        date.fromisoformat(time_min) if "T" not in time_min else datetime.fromisoformat(time_min.replace("Z", "+00:00"))
+    if time_max:
+        date.fromisoformat(time_max) if "T" not in time_max else datetime.fromisoformat(time_max.replace("Z", "+00:00"))
+    if time_min and time_max:
+        min_dt = datetime.fromisoformat(time_min.replace("Z", "+00:00")) if "T" in time_min else datetime.fromisoformat(time_min + "T00:00:00+00:00")
+        max_dt = datetime.fromisoformat(time_max.replace("Z", "+00:00")) if "T" in time_max else datetime.fromisoformat(time_max + "T00:00:00+00:00")
+        if min_dt >= max_dt:
+            raise ValueError("time_min must be before time_max")
+    try:
+        service = get_service()
+    except NotAuthenticated:
+        return {"error": "Calendar authentication expired. Please re-authorize."}
+
+    events = _apply_filters(service, time_min, time_max, days, keyword, location)
+    return {"events": events}
+
+def _apply_filters(service, time_min=None, time_max=None, days=None, keyword=None, location=None):
+    now = datetime.now(timezone.utc)
+    if time_min is None or time_max is None:
+        if days is not None:
+            time_min = now.isoformat()
+            time_max = (now + timedelta(days=days)).isoformat()
+        else:
+            time_min = (now - timedelta(days=30)).isoformat()
+            time_max = (now + timedelta(days=30)).isoformat()
+
+    events = _fetch_events(service, time_min, time_max)
+
+    if keyword:
+        kw = keyword.lower()
+        events = [e for e in events if kw in e.get("summary", "").lower() or kw in (e.get("description") or "").lower()]
+    if location:
+        loc = location.lower()
+        events = [e for e in events if loc in (e.get("location") or "").lower()]
+
+    return events
 
 
 def _register_tools():
@@ -286,6 +358,23 @@ def _register_tools():
             "required": [],
         },
         _do_today,
+    )
+
+    ToolRegistry.register(
+        "filter_events",
+        "Filter calendar events by date range, keyword, or location. Use ISO 8601 format for dates (e.g., 2025-07-01T09:00:00+00:00 or 2025-07-01). You can compute dates from the current time provided in the system prompt.",
+        {
+            "type": "object",
+            "properties": {
+                "time_min": {"type": "string", "description": "Start of range in ISO 8601 (e.g., 2025-07-01T00:00:00+00:00). Optional — omit to use default range."},
+                "time_max": {"type": "string", "description": "End of range in ISO 8601 (e.g., 2025-07-31T23:59:59+00:00). Optional — omit to use default range."},
+                "days": {"type": "integer", "description": "Number of days from now (1-365). Use instead of time_min/time_max for relative ranges. Default: 60 days (±30)."},
+                "keyword": {"type": "string", "description": "Search term matched case-insensitively in event summary and description."},
+                "location": {"type": "string", "description": "Search term matched case-insensitively in event location."},
+            },
+            "required": [],
+        },
+        _do_filter,
     )
 
 
@@ -482,3 +571,14 @@ async def delete_calendar_event(event_id: str, user: User = Depends(get_current_
             raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
     except NotAuthenticated as e:
         return {"auth_required": True, "auth_url": e.auth_url}
+
+
+@app.post("/api/calendar/filter")
+async def filter_events(req: EventFilterRequest, user: User = Depends(get_current_user)):
+    try:
+        service = get_service()
+    except NotAuthenticated as e:
+        return {"auth_required": True, "auth_url": e.auth_url}
+
+    events = _apply_filters(service, req.time_min, req.time_max, req.days, req.keyword, req.location)
+    return {"events": events}
