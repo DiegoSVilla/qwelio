@@ -1,4 +1,5 @@
 const API = "http://localhost:8000/api";
+const BACKEND = "http://localhost:8000";
 const chatHistory = [];
 let chatLoading = false;
 let calendarConnected = false;
@@ -95,7 +96,19 @@ async function loadToday() {
     while (container.firstChild) container.removeChild(container.firstChild);
     data.events.forEach(e => container.appendChild(createEventEl(e, false)));
   } catch (err) {
+    const container = document.getElementById("today-events");
+    const status = document.getElementById("calendar-status");
     setPlaceholder(container, "Failed to load today's events.");
+    while (status.firstChild) status.removeChild(status.firstChild);
+    const span = createEl("span");
+    span.textContent = "Calendar: ";
+    const a = document.createElement("a");
+    a.className = "connect-btn";
+    a.href = `${BACKEND}/api/calendar/auth`;
+    a.target = "_blank";
+    a.textContent = "Connect";
+    span.appendChild(a);
+    status.appendChild(span);
   }
 }
 

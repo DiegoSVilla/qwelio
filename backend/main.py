@@ -56,20 +56,13 @@ app.add_middleware(
 
 session_secret = os.getenv("SESSION_SECRET")
 if not session_secret:
-    import pathlib
-    secret_file = pathlib.Path(__file__).parent / ".session_secret"
-    if secret_file.exists():
-        session_secret = secret_file.read_text().strip()
-    else:
-        session_secret = secrets.token_hex(32)
-        secret_file.write_text(session_secret)
-        secret_file.chmod(0o600)
+    session_secret = secrets.token_hex(32)
 
 app.add_middleware(
     SessionMiddleware,
     secret_key=session_secret,
     https_only=os.getenv("HTTPS_ONLY", "false").lower() == "true",
-    max_age=86400,
+    max_age=3600,
 )
 
 
