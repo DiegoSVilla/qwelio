@@ -95,6 +95,46 @@ class TestInferenceSettingsInvalidValues:
             with pytest.raises(ValueError):
                 InferenceSettings()
 
+    def test_negative_temperature_raises(self):
+        with patch.dict(os.environ, {"LLM_TEMPERATURE": "-0.5"}):
+            with pytest.raises(ValueError, match="temperature"):
+                InferenceSettings()
+
+    def test_temperature_over_2_raises(self):
+        with patch.dict(os.environ, {"LLM_TEMPERATURE": "3.0"}):
+            with pytest.raises(ValueError, match="temperature"):
+                InferenceSettings()
+
+    def test_zero_timeout_raises(self):
+        with patch.dict(os.environ, {"LLM_TIMEOUT": "0"}):
+            with pytest.raises(ValueError, match="timeout"):
+                InferenceSettings()
+
+    def test_negative_timeout_raises(self):
+        with patch.dict(os.environ, {"LLM_TIMEOUT": "-1"}):
+            with pytest.raises(ValueError, match="timeout"):
+                InferenceSettings()
+
+    def test_negative_max_retries_raises(self):
+        with patch.dict(os.environ, {"LLM_MAX_RETRIES": "-1"}):
+            with pytest.raises(ValueError, match="max_retries"):
+                InferenceSettings()
+
+    def test_zero_max_context_turns_raises(self):
+        with patch.dict(os.environ, {"MAX_CONTEXT_TURNS": "0"}):
+            with pytest.raises(ValueError, match="max_context_turns"):
+                InferenceSettings()
+
+    def test_zero_max_tool_iterations_raises(self):
+        with patch.dict(os.environ, {"MAX_TOOL_ITERATIONS": "0"}):
+            with pytest.raises(ValueError, match="max_tool_iterations"):
+                InferenceSettings()
+
+    def test_empty_model_name_raises(self):
+        with patch.dict(os.environ, {"MODEL_NAME": ""}):
+            with pytest.raises(ValueError, match="model_name"):
+                InferenceSettings()
+
 
 class TestLLMUsesSettings:
     def test_get_client_uses_settings_timeout(self):
@@ -156,7 +196,7 @@ class TestSettingsEndpoint:
     @pytest.fixture
     async def auth_client(self, app_no_calendar):
         transport = ASGITransport(app=app_no_calendar)
-        async with AsyncClient(transport=transport, base_url="http://test", cookies={"session": "valid-token"}) as c:
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
             await c.post("/api/auth/login", json={"username": "admin", "password": "lels1234"})
             yield c
 
