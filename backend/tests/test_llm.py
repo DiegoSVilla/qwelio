@@ -97,12 +97,17 @@ class TestChat:
             mock_client.chat.completions.create = AsyncMock(return_value=mock_resp)
             MockClient.return_value = mock_client
 
-            await chat([{"role": "system", "content": "Be nice"}, {"role": "user", "content": "Hi"}])
+            mock_settings = MagicMock()
+            mock_settings.model_name = "test-model"
+            mock_settings.temperature = 0.5
+
+            with patch.object(llm, "_get_settings", return_value=mock_settings):
+                await chat([{"role": "system", "content": "Be nice"}, {"role": "user", "content": "Hi"}])
 
             mock_client.chat.completions.create.assert_called_once_with(
                 model="test-model",
                 messages=[{"role": "system", "content": "Be nice"}, {"role": "user", "content": "Hi"}],
-                temperature=0.6,
+                temperature=0.5,
             )
 
     @pytest.mark.asyncio

@@ -23,10 +23,10 @@ from tools import ToolRegistry
 from storage import init_db, save_turns, get_history, clear_history, cleanup_old_history, get_summaries
 from storage import DB_PATH
 from prompt import build_system_prompt, DEFAULT_TIMEZONE
+from settings import settings
 
 load_dotenv()
 
-MAX_CONTEXT_TURNS = int(os.getenv("MAX_CONTEXT_TURNS", "20"))
 HISTORY_RETENTION_DAYS = int(os.getenv("HISTORY_RETENTION_DAYS", "30"))
 
 
@@ -407,7 +407,7 @@ async def api_me(user: User = Depends(get_current_user)):
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
     try:
-        history = await get_history(user.id, limit=MAX_CONTEXT_TURNS)
+        history = await get_history(user.id, limit=settings.max_context_turns)
         clean_history = [{k: v for k, v in h.items() if k != "turn_order"} for h in history]
 
         # Fetch calendar context (async-safe, graceful degradation)
@@ -582,3 +582,15 @@ async def filter_events(req: EventFilterRequest, user: User = Depends(get_curren
 
     events = _apply_filters(service, req.time_min, req.time_max, req.days, req.keyword, req.location)
     return {"events": events}
+
+
+@app.get("/api/settings")
+async def get_settings(user: User = Depends(get_current_user)):
+    return {
+        "model_name": settings.model_name,
+        "temperature": settings.temperature,
+        "timeout": settings.timeout,
+        "max_retries": settings.max_retries,
+        "max_context_turns": settings.max_context_turns,
+        "max_tool_iterations": settings.max_tool_iterations,
+    }
