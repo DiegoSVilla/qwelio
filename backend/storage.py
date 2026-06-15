@@ -82,7 +82,7 @@ async def get_user_by_username(username: str):
 
 
 async def create_user(username: str, password: str) -> int:
-    """Create a new user with hashed password. Returns the new user id."""
+    """Create a new user with hashed password. Returns the new user id, or 0 if username exists."""
     import bcrypt
 
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -92,7 +92,7 @@ async def create_user(username: str, password: str) -> int:
             (username, password_hash),
         )
         await conn.commit()
-        return cursor.lastrowid
+        return cursor.lastrowid or 0
 
 
 async def save_turn(user_id: str, role: str, content: str | None, tool_calls: list | None, tool_call_id: str | None, turn_order: int):

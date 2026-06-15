@@ -22,7 +22,6 @@ test = [
     "pytest-asyncio",
     "httpx",
     "respx",
-    "bcrypt",
 ]
 dev = [
     "ruff",

@@ -4,6 +4,8 @@ from typing import Any
 import time
 import bcrypt
 
+import storage
+
 SESSION_KEY = "user"
 
 
@@ -13,6 +15,8 @@ class User(BaseModel):
     settings: dict[str, Any] = {}
 
 
+# Note: X-Forwarded-For is trusted without proxy validation.
+# In production, ensure a reverse proxy strips/rewrites this header.
 class RateLimiter:
     """Simple in-memory rate limiter keyed by IP address. Only tracks failed attempts."""
 
@@ -66,9 +70,7 @@ def get_current_user(request: Request) -> User:
 
 
 async def verify_password(username: str, password: str) -> bool:
-    from storage import get_user_by_username
-
-    row = await get_user_by_username(username)
+    row = await storage.get_user_by_username(username)
     if not row:
         return False
     stored_hash = row[2]

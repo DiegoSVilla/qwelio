@@ -931,7 +931,6 @@ dev = [
     { name = "ruff" },
 ]
 test = [
-    { name = "bcrypt" },
     { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -942,7 +941,6 @@ test = [
 requires-dist = [
     { name = "aiosqlite" },
     { name = "bcrypt" },
-    { name = "bcrypt", marker = "extra == 'test'" },
     { name = "fastapi" },
     { name = "google-api-python-client" },
     { name = "google-auth-httplib2" },
