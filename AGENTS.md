@@ -7,7 +7,7 @@ Qwelio is an AI-powered calendar assistant. The LLM agent is **time-aware** and 
 - **Backend** (FastAPI, port 8000): LLM chat, Google Calendar API, authentication, tool execution
 - **Frontend** (Express, port 3000): Static dashboard with week view, today's events, chat panel
 - Frontend calls backend at `http://localhost:8000/api/*`
-- Single-user for now (hardcoded login: `admin` / `lels1234`)
+- Single-user for now (seeded at startup: `admin` / `lels1234`, stored in SQLite with bcrypt)
 
 ## Directories
 - `backend/` — FastAPI app: `main.py`, `llm.py`, `gcalendar.py`
@@ -101,10 +101,11 @@ Persist conversation turn (user msg + assistant response + tool calls)
 - If context exceeds model's max tokens, oldest turns are dropped
 
 ## Authentication
-- Hardcoded login: username `admin`, password `lels1234`
-- Session-based (cookie or JWT token)
+- Users stored in SQLite with bcrypt-hashed passwords, seeded at startup (`admin` / `lels1234`)
+- Session-based (signed cookies)
 - All `/api/*` routes require authentication except `/api/calendar/auth` and `/api/calendar/callback`
 - Login endpoint: `POST /api/auth/login` → returns session cookie
+- IP-based rate limiting (5 attempts/60s) with `X-Forwarded-For` support
 
 ## Conventions
 - Never commit `.env`, `.venv/`, `node_modules/`, `.calendar_token.json`
@@ -127,3 +128,5 @@ Persist conversation turn (user msg + assistant response + tool calls)
 | 6 | Configurable inference settings (max context, model) | [#6](https://github.com/DiegoSVilla/qwelio/issues/6) ✅ |
 | 7 | Calendar filtering (custom date ranges, keyword, location) | [#7](https://github.com/DiegoSVilla/qwelio/issues/7) ✅ |
 | 8 | Time-aware system prompt (timezone, current time) | [#8](https://github.com/DiegoSVilla/qwelio/issues/8) ✅ |
+| 26 | UX onboarding (welcome, suggestion chips, empty states) | [#26](https://github.com/DiegoSVilla/qwelio/issues/26) ✅ |
+| 27 | Users migrated to SQLite with bcrypt hashing | [#27](https://github.com/DiegoSVilla/qwelio/issues/27) ✅ |

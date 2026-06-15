@@ -126,6 +126,8 @@ The agent operates as a **retrieval-augmented chat loop**:
 | 6 | Configurable inference settings (max context, model) | [#6](https://github.com/DiegoSVilla/qwelio/issues/6) ✅ |
 | 7 | Calendar filtering (custom date ranges, keyword, location) | [#7](https://github.com/DiegoSVilla/qwelio/issues/7) ✅ |
 | 8 | Time-aware system prompt (timezone, current time) | [#8](https://github.com/DiegoSVilla/qwelio/issues/8) ✅ |
+| 26 | UX onboarding (welcome, suggestion chips, empty states) | [#26](https://github.com/DiegoSVilla/qwelio/issues/26) ✅ |
+| 27 | Users migrated to SQLite with bcrypt hashing | [#27](https://github.com/DiegoSVilla/qwelio/issues/27) ✅ |
 
 ## License
 
