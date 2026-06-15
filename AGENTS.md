@@ -32,7 +32,8 @@ Qwelio is an AI-powered calendar assistant. The LLM agent is **time-aware** and 
 - See `backend/llm.py` for client setup
 - Lazy-init client — no import-time dependency on env vars
 - Current model: `google/gemma-4-12B-it-qat-w4a16-ct`
-- Temperature: 0.6, timeout: 30s, max retries: 2
+- Configurable via `.env`: `LLM_TEMPERATURE` (0.0–2.0, default 0.6), `LLM_TIMEOUT` (1–300s, default 30), `LLM_MAX_RETRIES` (>=0, default 2), `MAX_CONTEXT_TURNS` (1–100, default 20), `MAX_TOOL_ITERATIONS` (1–20, default 5)
+- Settings centralized in `backend/settings.py` with range validation, exposed via `GET /api/settings`
 
 ## Google Calendar
 - OAuth flow: navigate to `/api/calendar/auth`, callback at `/api/calendar/callback`
@@ -123,6 +124,6 @@ Persist conversation turn (user msg + assistant response + tool calls)
 | 3 | Agentic tool call loop with function calling | [#3](https://github.com/DiegoSVilla/qwelio/issues/3) ✅ |
 | 4 | Dynamic system prompt with calendar context injection | [#4](https://github.com/DiegoSVilla/qwelio/issues/4) ✅ |
 | 5 | Conversation history persistence | [#5](https://github.com/DiegoSVilla/qwelio/issues/5) ✅ |
-| 6 | Configurable inference settings (max context, model) | [#6](https://github.com/DiegoSVilla/qwelio/issues/6) |
+| 6 | Configurable inference settings (max context, model) | [#6](https://github.com/DiegoSVilla/qwelio/issues/6) ✅ |
 | 7 | Calendar filtering (custom date ranges, keyword, location) | [#7](https://github.com/DiegoSVilla/qwelio/issues/7) ✅ |
 | 8 | Time-aware system prompt (timezone, current time) | [#8](https://github.com/DiegoSVilla/qwelio/issues/8) ✅ |
