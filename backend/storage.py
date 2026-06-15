@@ -87,6 +87,9 @@ async def create_user(username: str, password: str) -> int:
 
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute("SELECT id FROM users WHERE username = ?", (username,))
+        if await cursor.fetchone():
+            return 0
         cursor = await conn.execute(
             "INSERT INTO users (username, password_hash) VALUES (?, ?)",
             (username, password_hash),

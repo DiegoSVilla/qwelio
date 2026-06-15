@@ -1,15 +1,7 @@
 import pytest
-from unittest.mock import patch
 from datetime import datetime, timezone, timedelta
 
 import storage
-
-
-@pytest.fixture(autouse=True)
-def reset_db_path(tmp_path):
-    db_path = tmp_path / "test_conversations.db"
-    with patch.object(storage, "DB_PATH", db_path):
-        yield db_path
 
 
 @pytest.fixture
