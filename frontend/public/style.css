@@ -263,3 +263,45 @@ main {
   color: #f85149;
   font-size: 0.9rem;
 }
+
+.connect-btn {
+  display: inline-block;
+  padding: 0.3rem 0.7rem;
+  background: #238636;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-weight: 500;
+  text-decoration: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-left: 0.25rem;
+}
+
+.connect-btn:hover {
+  background: #2ea043;
+}
+
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.suggestion-chip {
+  padding: 0.4rem 0.8rem;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 16px;
+  color: #e1e4e8;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.suggestion-chip:hover {
+  background: #30363d;
+  border-color: #58a6ff;
+}

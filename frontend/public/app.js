@@ -1,6 +1,7 @@
 const API = "http://localhost:8000/api";
 const chatHistory = [];
 let chatLoading = false;
+let calendarConnected = false;
 
 async function checkAuth() {
   try {
@@ -76,23 +77,26 @@ async function loadToday() {
     const status = document.getElementById("calendar-status");
 
     if (data.auth_required) {
-      status.innerHTML = "";
+      calendarConnected = false;
+      while (status.firstChild) status.removeChild(status.firstChild);
       const span = createEl("span");
       span.textContent = "Calendar: ";
       const a = document.createElement("a");
+      a.className = "connect-btn";
       a.href = data.auth_url;
       a.target = "_blank";
       a.textContent = "Connect";
       span.appendChild(a);
       status.appendChild(span);
-      setPlaceholder(container, "Connect your Google Calendar to see events.");
+      setPlaceholder(container, "Connect your Google Calendar to see your events.");
       return;
     }
 
+    calendarConnected = true;
     status.textContent = "Calendar: connected";
 
     if (!data.events || data.events.length === 0) {
-      setPlaceholder(container, "No events today.");
+      setPlaceholder(container, "No events today — ask me to schedule something!");
       return;
     }
 
@@ -115,7 +119,7 @@ async function loadWeek() {
     }
 
     if (!data.events || data.events.length === 0) {
-      setPlaceholder(container, "No events this week.");
+      setPlaceholder(container, "Your week is clear. Want help planning?");
       return;
     }
 
@@ -130,6 +134,39 @@ function addMessage(role, content) {
   const container = document.getElementById("chat-messages");
   const div = createEl("div", `message ${role}`, content);
   container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function sendSuggestion(text) {
+  document.getElementById("chat-input").value = text;
+  document.getElementById("chat-form").dispatchEvent(new Event("submit"));
+}
+
+function getSuggestions() {
+  if (!calendarConnected) {
+    return ["Connect your calendar", "What can Qwelio do?", "How does this work?"];
+  }
+  return ["What do I have today?", "Schedule a meeting for tomorrow at 2pm", "Show my week"];
+}
+
+function initOnboarding() {
+  const container = document.getElementById("chat-messages");
+  if (container.children.length > 0) return;
+
+  const welcome = createEl("div", "message assistant");
+  welcome.textContent = "Welcome to Qwelio! I'm your AI calendar assistant. Connect your Google Calendar and I can help you manage your schedule.";
+  container.appendChild(welcome);
+
+  const chips = createEl("div", "suggestion-chips");
+  getSuggestions().forEach(text => {
+    const btn = createEl("button", "suggestion-chip", text);
+    btn.addEventListener("click", () => {
+      chips.remove();
+      sendSuggestion(text);
+    });
+    chips.appendChild(btn);
+  });
+  container.appendChild(chips);
   container.scrollTop = container.scrollHeight;
 }
 
@@ -175,6 +212,7 @@ document.getElementById("logout-btn").addEventListener("click", logout);
 if (await checkAuth()) {
   loadToday();
   loadWeek();
+  initOnboarding();
   setInterval(loadToday, 60000);
   setInterval(loadWeek, 300000);
 }
