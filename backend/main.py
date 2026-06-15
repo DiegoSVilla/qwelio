@@ -20,7 +20,7 @@ from llm import chat_with_tools, LLMError
 from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, _fetch_events, NotAuthenticated
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 from tools import ToolRegistry
-from storage import init_db, save_turns, get_history, clear_history, cleanup_old_history, get_summaries
+from storage import init_db, seed_default_users, save_turns, get_history, clear_history, cleanup_old_history, get_summaries
 from storage import DB_PATH
 from prompt import build_system_prompt, DEFAULT_TIMEZONE
 from settings import settings
@@ -33,6 +33,7 @@ HISTORY_RETENTION_DAYS = int(os.getenv("HISTORY_RETENTION_DAYS", "30"))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await seed_default_users()
     await cleanup_old_history(HISTORY_RETENTION_DAYS)
     yield
     try:
@@ -385,7 +386,7 @@ _register_tools()
 async def api_login(request: Request, req: LoginRequest):
     if _rate_limiter.is_limited(request):
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
-    if not verify_password(req.username, req.password):
+    if not await verify_password(req.username, req.password):
         _rate_limiter.record(request)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     user = User(id=req.username, username=req.username)

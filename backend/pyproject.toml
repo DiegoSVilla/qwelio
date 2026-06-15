@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv",
     "itsdangerous",
     "aiosqlite",
+    "bcrypt",
 ]
 
 [project.optional-dependencies]

@@ -38,11 +38,64 @@ async def init_db():
                 counter INTEGER NOT NULL DEFAULT 0
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_turn ON conversations(user_id, turn_order)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_timestamp ON conversations(timestamp)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_period ON summaries(user_id, period, period_start)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_summaries_created_at ON summaries(created_at)")
         await conn.commit()
+
+
+async def seed_default_users():
+    """Idempotently seed the default admin user. Called once at startup after init_db."""
+    import bcrypt
+
+    default_users = [
+        ("admin", "lels1234"),
+    ]
+    async with aiosqlite.connect(DB_PATH) as conn:
+        for username, password in default_users:
+            cursor = await conn.execute("SELECT id FROM users WHERE username = ?", (username,))
+            if await cursor.fetchone():
+                continue
+            password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            await conn.execute(
+                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                (username, password_hash),
+            )
+        await conn.commit()
+
+
+async def get_user_by_username(username: str):
+    """Return (id, username, password_hash) or None."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute("SELECT id, username, password_hash FROM users WHERE username = ?", (username,))
+        row = await cursor.fetchone()
+    return row
+
+
+async def create_user(username: str, password: str) -> int:
+    """Create a new user with hashed password. Returns the new user id, or 0 if username exists."""
+    import bcrypt
+
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute("SELECT id FROM users WHERE username = ?", (username,))
+        if await cursor.fetchone():
+            return 0
+        cursor = await conn.execute(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            (username, password_hash),
+        )
+        await conn.commit()
+        return cursor.lastrowid or 0
 
 
 async def save_turn(user_id: str, role: str, content: str | None, tool_calls: list | None, tool_call_id: str | None, turn_order: int):

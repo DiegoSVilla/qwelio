@@ -4,6 +4,24 @@ import os
 import importlib
 from unittest.mock import patch, MagicMock
 
+import storage
+
+
+@pytest.fixture(autouse=True)
+def reset_db_path(tmp_path):
+    """Isolate DB path per test to avoid shared mutable state."""
+    db_path = tmp_path / "test_conversations.db"
+    with patch.object(storage, "DB_PATH", db_path):
+        yield db_path
+
+
+@pytest.fixture(autouse=True)
+async def setup_test_db(reset_db_path):
+    """Initialize DB and seed default users before each test."""
+    await storage.init_db()
+    await storage.seed_default_users()
+    yield
+
 
 @pytest.fixture(autouse=True)
 def reset_rate_limiter():
