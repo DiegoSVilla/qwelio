@@ -26,15 +26,15 @@ cd qwelio
 # Install dependencies
 npm run install:all
 
-# Configure .env (create manually)
-# Required: QWEN_API_URL, QWEN_API_KEY, MODEL_NAME
-# Required for calendar features: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
+# Configure .env
+cp .env.example .env
+# Edit .env with your API keys and credentials
 
 # Run both servers
 npm run dev
 ```
 
-Open http://localhost:3000 in your browser.
+Open http://localhost:3000 in your browser. Login with `admin` / `lels1234`.
 
 ## Commands
 
@@ -52,7 +52,7 @@ Open http://localhost:3000 in your browser.
 
 ## Configuration
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` and fill in your credentials:
 
 ```env
 # LLM (required)
@@ -65,7 +65,7 @@ GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/api/calendar/callback
 
-# Authentication (required — random default invalidates sessions on restart)
+# Authentication (optional — auto-generated if omitted)
 SESSION_SECRET=your-session-secret
 
 # Inference settings (optional, defaults shown)
@@ -74,8 +74,34 @@ LLM_TIMEOUT=30.0
 LLM_MAX_RETRIES=2
 MAX_CONTEXT_TURNS=20
 MAX_TOOL_ITERATIONS=5
-USER_TIMEZONE=America/New_York
+
+# User settings (optional)
+USER_TIMEZONE=UTC
+HISTORY_RETENTION_DAYS=30
+SUMMARIZE_COOLDOWN_SECONDS=300
+HTTPS_ONLY=false
 ```
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `QWEN_API_URL` | Yes | — | OpenAI-compatible API endpoint |
+| `QWEN_API_KEY` | Yes | — | API key for the LLM provider |
+| `MODEL_NAME` | Yes | `google/gemma-4-12B-it-qat-w4a16-ct` | Model to use for inference |
+| `GOOGLE_CLIENT_ID` | Calendar only | — | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Calendar only | — | Google OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | Calendar only | `http://localhost:8000/api/calendar/callback` | OAuth redirect URI |
+| `SESSION_SECRET` | No | auto-generated | Secret for signing session cookies |
+| `LLM_TEMPERATURE` | No | `0.6` | Sampling temperature (0.0–2.0) |
+| `LLM_TIMEOUT` | No | `30.0` | Request timeout in seconds (1–300) |
+| `LLM_MAX_RETRIES` | No | `2` | Max retry attempts on failure (>=0) |
+| `MAX_CONTEXT_TURNS` | No | `20` | Conversation turns sent to LLM (1–100) |
+| `MAX_TOOL_ITERATIONS` | No | `5` | Max tool call loop iterations (1–20) |
+| `USER_TIMEZONE` | No | `UTC` | User timezone for calendar context |
+| `HISTORY_RETENTION_DAYS` | No | `30` | Days to retain conversation history |
+| `SUMMARIZE_COOLDOWN_SECONDS` | No | `300` | Min seconds between summarization runs |
+| `HTTPS_ONLY` | No | `false` | Force HTTPS-only cookies |
 
 ## Agent Flow
 

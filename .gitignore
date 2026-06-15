@@ -21,6 +21,9 @@ backend/.calendar_token.json
 # Session secret
 backend/.session_secret
 
+# Google OAuth client secrets
+backend/client_secrets.json
+
 # Logs
 *.log
 
