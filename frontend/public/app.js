@@ -217,10 +217,12 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
 
 document.getElementById("logout-btn").addEventListener("click", logout);
 
-if (await checkAuth()) {
-  await loadToday();
-  loadWeek();
-  initOnboarding();
-  setInterval(loadToday, 60000);
-  setInterval(loadWeek, 300000);
-}
+(async () => {
+  if (await checkAuth()) {
+    await loadToday();
+    loadWeek();
+    initOnboarding();
+    setInterval(loadToday, 60000);
+    setInterval(loadWeek, 300000);
+  }
+})();
