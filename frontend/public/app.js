@@ -3,20 +3,10 @@ const chatHistory = [];
 let chatLoading = false;
 let calendarConnected = false;
 
-async function checkAuth() {
-  try {
-    const res = await fetch(`${API}/auth/me`, { credentials: "include" });
-    if (!res.ok) {
-      window.location.href = "/";
-      return false;
-    }
-    document.getElementById("loading-overlay").style.display = "none";
-    document.getElementById("app-root").classList.remove("app-hidden");
-    return true;
-  } catch {
-    window.location.href = "/";
-    return false;
-  }
+function checkAuth() {
+  document.getElementById("loading-overlay").style.display = "none";
+  document.getElementById("app-root").classList.remove("app-hidden");
+  return true;
 }
 
 async function logout() {
