@@ -1,6 +1,7 @@
 const API = "http://localhost:8000/api";
 const chatHistory = [];
 let chatLoading = false;
+let calendarConnected = false;
 
 async function checkAuth() {
   try {
@@ -76,23 +77,26 @@ async function loadToday() {
     const status = document.getElementById("calendar-status");
 
     if (data.auth_required) {
-      status.innerHTML = "";
+      calendarConnected = false;
+      while (status.firstChild) status.removeChild(status.firstChild);
       const span = createEl("span");
       span.textContent = "Calendar: ";
       const a = document.createElement("a");
+      a.className = "connect-btn";
       a.href = data.auth_url;
       a.target = "_blank";
       a.textContent = "Connect";
       span.appendChild(a);
       status.appendChild(span);
-      setPlaceholder(container, "Connect your Google Calendar to see events.");
+      setPlaceholder(container, "Connect your Google Calendar to see your events.");
       return;
     }
 
+    calendarConnected = true;
     status.textContent = "Calendar: connected";
 
     if (!data.events || data.events.length === 0) {
-      setPlaceholder(container, "No events today.");
+      setPlaceholder(container, "No events today — ask me to schedule something!");
       return;
     }
 
@@ -115,7 +119,7 @@ async function loadWeek() {
     }
 
     if (!data.events || data.events.length === 0) {
-      setPlaceholder(container, "No events this week.");
+      setPlaceholder(container, "Your week is clear. Want help planning?");
       return;
     }
 
@@ -133,6 +137,45 @@ function addMessage(role, content) {
   container.scrollTop = container.scrollHeight;
 }
 
+const SUGGESTIONS = {
+  disconnected: ["Connect your calendar", "What can Qwelio do?", "How does this work?"],
+  connected: ["What do I have today?", "Schedule a meeting for tomorrow at 2pm", "Show my week"],
+};
+
+function sendSuggestion(text) {
+  document.getElementById("chat-input").value = text;
+  document.getElementById("chat-form").dispatchEvent(new Event("submit", { cancelable: true }));
+}
+
+function getSuggestions() {
+  return calendarConnected ? SUGGESTIONS.connected : SUGGESTIONS.disconnected;
+}
+
+function initOnboarding() {
+  const container = document.getElementById("chat-messages");
+  if (container.dataset.onboarded) return;
+  container.dataset.onboarded = "true";
+
+  const welcome = createEl("div", "message assistant welcome");
+  welcome.textContent = "Welcome to Qwelio! I'm your AI calendar assistant. Connect your Google Calendar and I can help you manage your schedule.";
+  container.appendChild(welcome);
+
+  const chips = createEl("div", "suggestion-chips");
+  getSuggestions().forEach(text => {
+    const btn = createEl("button", "suggestion-chip", text);
+    btn.addEventListener("click", () => {
+      if (chatLoading) return;
+      chips.remove();
+      const welcomeEl = container.querySelector(".message.welcome");
+      if (welcomeEl) welcomeEl.remove();
+      sendSuggestion(text);
+    });
+    chips.appendChild(btn);
+  });
+  container.appendChild(chips);
+  container.scrollTop = container.scrollHeight;
+}
+
 document.getElementById("chat-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (chatLoading) return;
@@ -145,6 +188,8 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
   chatLoading = true;
   document.getElementById("chat-form").querySelector("button").disabled = true;
 
+  const welcomeEl = document.querySelector(".message.welcome");
+  if (welcomeEl) welcomeEl.remove();
   addMessage("user", text);
   chatHistory.push({ role: "user", content: text });
 
@@ -172,9 +217,12 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
 
 document.getElementById("logout-btn").addEventListener("click", logout);
 
-if (await checkAuth()) {
-  loadToday();
-  loadWeek();
-  setInterval(loadToday, 60000);
-  setInterval(loadWeek, 300000);
-}
+(async () => {
+  if (await checkAuth()) {
+    await loadToday();
+    loadWeek();
+    initOnboarding();
+    setInterval(loadToday, 60000);
+    setInterval(loadWeek, 300000);
+  }
+})();
