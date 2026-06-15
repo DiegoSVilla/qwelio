@@ -280,6 +280,7 @@ main {
 
 .connect-btn:hover {
   background: #2ea043;
+  text-decoration: none;
 }
 
 .suggestion-chips {
@@ -298,7 +299,7 @@ main {
   color: #e1e4e8;
   font-size: 0.85rem;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .suggestion-chip:hover {

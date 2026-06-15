@@ -137,23 +137,26 @@ function addMessage(role, content) {
   container.scrollTop = container.scrollHeight;
 }
 
+const SUGGESTIONS = {
+  disconnected: ["Connect your calendar", "What can Qwelio do?", "How does this work?"],
+  connected: ["What do I have today?", "Schedule a meeting for tomorrow at 2pm", "Show my week"],
+};
+
 function sendSuggestion(text) {
   document.getElementById("chat-input").value = text;
-  document.getElementById("chat-form").dispatchEvent(new Event("submit"));
+  document.getElementById("chat-form").dispatchEvent(new Event("submit", { cancelable: true }));
 }
 
 function getSuggestions() {
-  if (!calendarConnected) {
-    return ["Connect your calendar", "What can Qwelio do?", "How does this work?"];
-  }
-  return ["What do I have today?", "Schedule a meeting for tomorrow at 2pm", "Show my week"];
+  return calendarConnected ? SUGGESTIONS.connected : SUGGESTIONS.disconnected;
 }
 
 function initOnboarding() {
   const container = document.getElementById("chat-messages");
-  if (container.children.length > 0) return;
+  if (container.dataset.onboarded) return;
+  container.dataset.onboarded = "true";
 
-  const welcome = createEl("div", "message assistant");
+  const welcome = createEl("div", "message assistant welcome");
   welcome.textContent = "Welcome to Qwelio! I'm your AI calendar assistant. Connect your Google Calendar and I can help you manage your schedule.";
   container.appendChild(welcome);
 
@@ -161,7 +164,10 @@ function initOnboarding() {
   getSuggestions().forEach(text => {
     const btn = createEl("button", "suggestion-chip", text);
     btn.addEventListener("click", () => {
+      if (chatLoading) return;
       chips.remove();
+      const welcomeEl = container.querySelector(".message.welcome");
+      if (welcomeEl) welcomeEl.remove();
       sendSuggestion(text);
     });
     chips.appendChild(btn);
@@ -182,6 +188,8 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
   chatLoading = true;
   document.getElementById("chat-form").querySelector("button").disabled = true;
 
+  const welcomeEl = document.querySelector(".message.welcome");
+  if (welcomeEl) welcomeEl.remove();
   addMessage("user", text);
   chatHistory.push({ role: "user", content: text });
 
@@ -210,7 +218,7 @@ document.getElementById("chat-form").addEventListener("submit", async (e) => {
 document.getElementById("logout-btn").addEventListener("click", logout);
 
 if (await checkAuth()) {
-  loadToday();
+  await loadToday();
   loadWeek();
   initOnboarding();
   setInterval(loadToday, 60000);
