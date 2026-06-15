@@ -7,19 +7,21 @@ async function checkAuth() {
   try {
     const res = await fetch(`${API}/auth/me`, { credentials: "include" });
     if (!res.ok) {
-      window.location.href = "/login.html";
+      window.location.href = "/";
       return false;
     }
+    document.getElementById("loading-overlay").style.display = "none";
+    document.getElementById("app-root").classList.remove("app-hidden");
     return true;
   } catch {
-    window.location.href = "/login.html";
+    window.location.href = "/";
     return false;
   }
 }
 
 async function logout() {
   await fetch(`${API}/auth/logout`, { method: "POST", credentials: "include" });
-  window.location.href = "/login.html";
+  window.location.href = "/";
 }
 
 function createEl(tag, className, text) {
@@ -100,7 +102,7 @@ async function loadToday() {
       return;
     }
 
-    container.innerHTML = "";
+    while (container.firstChild) container.removeChild(container.firstChild);
     data.events.forEach(e => container.appendChild(createEventEl(e, false)));
   } catch (err) {
     setPlaceholder(container, "Failed to load today's events.");
@@ -123,7 +125,7 @@ async function loadWeek() {
       return;
     }
 
-    container.innerHTML = "";
+    while (container.firstChild) container.removeChild(container.firstChild);
     data.events.forEach(e => container.appendChild(createEventEl(e, true)));
   } catch (err) {
     setPlaceholder(container, "Failed to load week's events.");

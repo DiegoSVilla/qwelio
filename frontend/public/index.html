@@ -7,7 +7,12 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div class="container">
+  <div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite">
+    <div class="loading-spinner"></div>
+    <p>Loading Qwelio...</p>
+  </div>
+
+  <div id="app-root" class="container app-hidden">
     <header>
       <h1>Qwelio</h1>
       <div class="header-status">
