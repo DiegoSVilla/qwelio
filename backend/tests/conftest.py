@@ -6,6 +6,15 @@ from unittest.mock import patch, MagicMock
 
 
 @pytest.fixture(autouse=True)
+async def setup_test_db():
+    """Initialize DB and seed default users before each test."""
+    import storage
+    await storage.init_db()
+    await storage.seed_default_users()
+    yield
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limiter():
     import auth
     auth.reset_rate_limiter()

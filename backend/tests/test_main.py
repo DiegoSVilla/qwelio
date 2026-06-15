@@ -430,20 +430,41 @@ class TestRateLimiter:
         time.sleep(1.1)
         assert limiter.is_limited(mock_request) is False
 
-    def test_verify_password_correct(self):
-        assert auth.verify_password("admin", "lels1234") is True
+    @pytest.mark.asyncio
+    async def test_verify_password_correct(self):
+        import bcrypt
+        fake_hash = bcrypt.hashpw(b"lels1234", bcrypt.gensalt()).decode()
+        with patch("storage.get_user_by_username", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = (1, "admin", fake_hash)
+            assert await auth.verify_password("admin", "lels1234") is True
 
-    def test_verify_password_wrong(self):
-        assert auth.verify_password("admin", "wrong") is False
+    @pytest.mark.asyncio
+    async def test_verify_password_wrong(self):
+        import bcrypt
+        fake_hash = bcrypt.hashpw(b"lels1234", bcrypt.gensalt()).decode()
+        with patch("storage.get_user_by_username", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = (1, "admin", fake_hash)
+            assert await auth.verify_password("admin", "wrong") is False
 
-    def test_verify_password_unknown_user(self):
-        assert auth.verify_password("nobody", "anything") is False
+    @pytest.mark.asyncio
+    async def test_verify_password_unknown_user(self):
+        with patch("storage.get_user_by_username", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = None
+            assert await auth.verify_password("nobody", "anything") is False
 
-    def test_verify_password_empty_string(self):
-        assert auth.verify_password("admin", "") is False
+    @pytest.mark.asyncio
+    async def test_verify_password_empty_string(self):
+        import bcrypt
+        fake_hash = bcrypt.hashpw(b"lels1234", bcrypt.gensalt()).decode()
+        with patch("storage.get_user_by_username", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = (1, "admin", fake_hash)
+            assert await auth.verify_password("admin", "") is False
 
-    def test_verify_password_unknown_empty(self):
-        assert auth.verify_password("nobody", "") is False
+    @pytest.mark.asyncio
+    async def test_verify_password_unknown_empty(self):
+        with patch("storage.get_user_by_username", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = None
+            assert await auth.verify_password("nobody", "") is False
 
 
 class TestCalendarWriteEndpoints:

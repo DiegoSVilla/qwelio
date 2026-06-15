@@ -2,11 +2,7 @@ from fastapi import HTTPException, Request
 from pydantic import BaseModel
 from typing import Any
 import time
-import hmac
-
-HARDCODED_USERS = {
-    "admin": "lels1234",
-}
+import bcrypt
 
 SESSION_KEY = "user"
 
@@ -26,8 +22,6 @@ class RateLimiter:
         self._requests: dict[str, list[float]] = {}
 
     def _client_ip(self, request: Request) -> str:
-        # Note: X-Forwarded-For is trusted without proxy validation.
-        # In production, ensure a reverse proxy strips/rewrites this header.
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
             return forwarded.split(",")[0].strip()
@@ -71,8 +65,11 @@ def get_current_user(request: Request) -> User:
     return User(**user_data)
 
 
-def verify_password(username: str, password: str) -> bool:
-    stored = HARDCODED_USERS.get(username)
-    if stored is None:
+async def verify_password(username: str, password: str) -> bool:
+    from storage import get_user_by_username
+
+    row = await get_user_by_username(username)
+    if not row:
         return False
-    return hmac.compare_digest(stored, password)
+    stored_hash = row[2]
+    return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))

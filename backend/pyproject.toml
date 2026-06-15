@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv",
     "itsdangerous",
     "aiosqlite",
+    "bcrypt",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +22,7 @@ test = [
     "pytest-asyncio",
     "httpx",
     "respx",
+    "bcrypt",
 ]
 dev = [
     "ruff",
