@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 from tools import ToolRegistry
-from settings import settings
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -15,30 +14,38 @@ class LLMError(Exception):
     pass
 
 
+def _get_settings():
+    """Lazy import to pick up reloaded settings singleton in tests."""
+    from settings import settings
+    return settings
+
+
 def _get_client():
+    s = _get_settings()
     api_key = os.getenv("QWEN_API_KEY")
     if not api_key:
         raise RuntimeError("QWEN_API_KEY not set")
     return AsyncOpenAI(
         base_url=os.getenv("QWEN_API_URL", "https://inference.beestorm.ai/v1"),
         api_key=api_key,
-        timeout=settings.timeout,
-        max_retries=settings.max_retries,
+        timeout=s.timeout,
+        max_retries=s.max_retries,
     )
 
 
 def _get_model():
-    return settings.model_name
+    return _get_settings().model_name
 
 
 async def chat(messages: list[dict]) -> str:
+    s = _get_settings()
     client = _get_client()
     model = _get_model()
     try:
         resp = await client.chat.completions.create(
             model=model,
             messages=messages,
-            temperature=settings.temperature,
+            temperature=s.temperature,
         )
         if not resp.choices:
             raise LLMError("Empty response from LLM")
@@ -57,18 +64,19 @@ async def chat_with_tools(messages: list[dict], tool_definitions: list[dict]) ->
     Returns (content, new_messages) where new_messages contains all assistant/tool
     messages generated during the tool call loop for persistence.
     """
+    s = _get_settings()
     client = _get_client()
     model = _get_model()
 
     working_messages = list(messages)
     new_messages = []
 
-    for iteration in range(settings.max_tool_iterations):
+    for iteration in range(s.max_tool_iterations):
         try:
             resp = await client.chat.completions.create(
                 model=model,
                 messages=working_messages,
-                temperature=settings.temperature,
+                temperature=s.temperature,
                 tools=tool_definitions,
             )
         except APIConnectionError as e:
@@ -134,4 +142,4 @@ async def chat_with_tools(messages: list[dict], tool_definitions: list[dict]) ->
             })
             return message.content or "", new_messages
 
-    raise LLMError(f"Tool loop exceeded {settings.max_tool_iterations} iterations")
+    raise LLMError(f"Tool loop exceeded {s.max_tool_iterations} iterations")

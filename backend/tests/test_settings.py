@@ -135,26 +135,81 @@ class TestInferenceSettingsInvalidValues:
             with pytest.raises(ValueError, match="model_name"):
                 InferenceSettings()
 
+    def test_whitespace_model_name_raises(self):
+        with patch.dict(os.environ, {"MODEL_NAME": "   "}):
+            with pytest.raises(ValueError, match="model_name"):
+                InferenceSettings()
+
+    def test_timeout_over_300_raises(self):
+        with patch.dict(os.environ, {"LLM_TIMEOUT": "301"}):
+            with pytest.raises(ValueError, match="timeout"):
+                InferenceSettings()
+
+    def test_max_context_turns_over_100_raises(self):
+        with patch.dict(os.environ, {"MAX_CONTEXT_TURNS": "101"}):
+            with pytest.raises(ValueError, match="max_context_turns"):
+                InferenceSettings()
+
+    def test_max_tool_iterations_over_20_raises(self):
+        with patch.dict(os.environ, {"MAX_TOOL_ITERATIONS": "21"}):
+            with pytest.raises(ValueError, match="max_tool_iterations"):
+                InferenceSettings()
+
+    def test_temperature_boundary_zero_valid(self):
+        with patch.dict(os.environ, {"LLM_TEMPERATURE": "0.0"}):
+            s = InferenceSettings()
+            assert s.temperature == 0.0
+
+    def test_temperature_boundary_two_valid(self):
+        with patch.dict(os.environ, {"LLM_TEMPERATURE": "2.0"}):
+            s = InferenceSettings()
+            assert s.temperature == 2.0
+
+    def test_timeout_boundary_300_valid(self):
+        with patch.dict(os.environ, {"LLM_TIMEOUT": "300"}):
+            s = InferenceSettings()
+            assert s.timeout == 300.0
+
+    def test_max_context_turns_boundary_100_valid(self):
+        with patch.dict(os.environ, {"MAX_CONTEXT_TURNS": "100"}):
+            s = InferenceSettings()
+            assert s.max_context_turns == 100
+
+    def test_max_tool_iterations_boundary_20_valid(self):
+        with patch.dict(os.environ, {"MAX_TOOL_ITERATIONS": "20"}):
+            s = InferenceSettings()
+            assert s.max_tool_iterations == 20
+
+    def test_model_name_stripped(self):
+        with patch.dict(os.environ, {"MODEL_NAME": "  test-model  "}):
+            s = InferenceSettings()
+            assert s.model_name == "test-model"
+
 
 class TestLLMUsesSettings:
     def test_get_client_uses_settings_timeout(self):
         import llm as llm_mod
-        with patch.object(settings, "timeout", 45.0):
-            with patch.object(settings, "max_retries", 3):
-                with patch.dict(os.environ, {"QWEN_API_KEY": "test-key"}):
-                    with patch.object(llm_mod, "AsyncOpenAI") as MockClient:
-                        MockClient.return_value = AsyncMock()
-                        llm_mod._get_client()
-                        MockClient.assert_called_once()
-                        call_kwargs = MockClient.call_args[1]
-                        assert call_kwargs["timeout"] == 45.0
-                        assert call_kwargs["max_retries"] == 3
+        mock_s = MagicMock()
+        mock_s.timeout = 45.0
+        mock_s.max_retries = 3
+        with patch.object(llm_mod, "_get_settings", return_value=mock_s):
+            with patch.dict(os.environ, {"QWEN_API_KEY": "test-key"}):
+                with patch.object(llm_mod, "AsyncOpenAI") as MockClient:
+                    MockClient.return_value = AsyncMock()
+                    llm_mod._get_client()
+                    MockClient.assert_called_once()
+                    call_kwargs = MockClient.call_args[1]
+                    assert call_kwargs["timeout"] == 45.0
+                    assert call_kwargs["max_retries"] == 3
 
     def test_chat_uses_settings_temperature(self):
         import llm as llm_mod
         mock_resp = MagicMock()
         mock_resp.choices = [MagicMock(message=MagicMock(content="OK"))]
-        with patch.object(settings, "temperature", 0.95):
+        mock_s = MagicMock()
+        mock_s.model_name = "test-model"
+        mock_s.temperature = 0.95
+        with patch.object(llm_mod, "_get_settings", return_value=mock_s):
             with patch("llm.AsyncOpenAI") as MockClient:
                 mock_client = AsyncMock()
                 mock_client.chat.completions.create = AsyncMock(return_value=mock_resp)
@@ -174,7 +229,11 @@ class TestLLMUsesSettings:
         mock_msg.content = "Done"
         mock_resp = MagicMock()
         mock_resp.choices = [MagicMock(message=mock_msg)]
-        with patch.object(settings, "max_tool_iterations", 3):
+        mock_s = MagicMock()
+        mock_s.model_name = "test-model"
+        mock_s.temperature = 0.6
+        mock_s.max_tool_iterations = 3
+        with patch.object(llm_mod, "_get_settings", return_value=mock_s):
             with patch("llm.AsyncOpenAI") as MockClient:
                 mock_client = AsyncMock()
                 mock_client.chat.completions.create = AsyncMock(return_value=mock_resp)

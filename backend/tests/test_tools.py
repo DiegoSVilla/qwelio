@@ -135,7 +135,10 @@ class TestChatWithTools:
             mock_client.chat.completions.create = AsyncMock(return_value=mock_resp)
             mock_client_fn.return_value = mock_client
             with patch("llm._get_model", return_value="test-model"):
-                with patch.object(llm.settings, "max_tool_iterations", 2):
+                mock_s = Mock()
+                mock_s.temperature = 0.6
+                mock_s.max_tool_iterations = 2
+                with patch.object(llm, "_get_settings", return_value=mock_s):
                     with patch("tools.ToolRegistry.execute", new_callable=AsyncMock) as mock_exec:
                         mock_exec.return_value = '{"ok": true}'
                         from llm import chat_with_tools
