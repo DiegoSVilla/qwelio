@@ -21,29 +21,33 @@
       </div>
     </header>
 
-    <main>
-      <section class="panel">
-        <h2>Today</h2>
-        <div id="today-events">
-          <p class="placeholder">Loading today's events...</p>
-        </div>
-      </section>
+    <main class="dashboard">
+      <div class="calendar-section">
+        <section class="panel">
+          <h2>Today</h2>
+          <div id="today-events">
+            <p class="placeholder">Loading today's events...</p>
+          </div>
+        </section>
 
-      <section class="panel">
-        <h2>This Week</h2>
-        <div id="week-events">
-          <p class="placeholder">Loading week's events...</p>
-        </div>
-      </section>
+        <section class="panel">
+          <h2>This Week</h2>
+          <div id="week-events">
+            <p class="placeholder">Loading week's events...</p>
+          </div>
+        </section>
+      </div>
 
-      <section class="panel chat-panel">
-        <h2>Chat</h2>
-        <div id="chat-messages" class="chat-messages"></div>
-        <form id="chat-form" class="chat-form">
-          <input type="text" id="chat-input" placeholder="Ask something..." autocomplete="off">
-          <button type="submit">Send</button>
-        </form>
-      </section>
+      <aside class="chat-panel">
+        <div class="panel">
+          <h2>Chat</h2>
+          <div id="chat-messages" class="chat-messages"></div>
+          <form id="chat-form" class="chat-form">
+            <input type="text" id="chat-input" placeholder="Ask something..." autocomplete="off">
+            <button type="submit">Send</button>
+          </form>
+        </div>
+      </aside>
     </main>
   </div>
 
