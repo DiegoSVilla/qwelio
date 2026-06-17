@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import os
 import json
 import pathlib
+from prompt import _parse_tz_offset
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 TOKEN_PATH = pathlib.Path(__file__).parent / ".calendar_token.json"
@@ -179,22 +180,28 @@ def _to_gapi_event(summary, start, end, location=None, description=None, user_tz
 
     When user_tz is provided, we strip any offset from the dateTime and set
     the timeZone field so Google interprets the time in the user's timezone.
+    start/end may be None (partial updates for edit_event).
     """
-    event = {"summary": summary}
-    if "T" in start:
-        dt = _strip_offset(start) if user_tz else start
-        event["start"] = {"dateTime": dt}
-        if user_tz:
-            event["start"]["timeZone"] = _tz_to_iana(user_tz)
-    else:
-        event["start"] = {"date": start}
-    if "T" in end:
-        dt = _strip_offset(end) if user_tz else end
-        event["end"] = {"dateTime": dt}
-        if user_tz:
-            event["end"]["timeZone"] = _tz_to_iana(user_tz)
-    else:
-        event["end"] = {"date": end}
+    print(f"[QW-G090] _to_gapi_event: summary={summary}, start={start}, end={end}, user_tz={user_tz}")
+    event = {}
+    if summary is not None:
+        event["summary"] = summary
+    if start is not None:
+        if "T" in start:
+            dt = _strip_offset(start) if user_tz else start
+            event["start"] = {"dateTime": dt}
+            if user_tz:
+                event["start"]["timeZone"] = _tz_to_iana(user_tz)
+        else:
+            event["start"] = {"date": start}
+    if end is not None:
+        if "T" in end:
+            dt = _strip_offset(end) if user_tz else end
+            event["end"] = {"dateTime": dt}
+            if user_tz:
+                event["end"]["timeZone"] = _tz_to_iana(user_tz)
+        else:
+            event["end"] = {"date": end}
     if location is not None:
         event["location"] = location
     if description is not None:
@@ -203,19 +210,39 @@ def _to_gapi_event(summary, start, end, location=None, description=None, user_tz
 
 
 def _tz_to_iana(tz: str) -> str:
-    """Convert UTC offset string (e.g. 'UTC-3') to IANA 'Etc/GMT+3'.
+    """Convert UTC offset string to IANA timezone name accepted by Google Calendar API.
 
-    POSIX/GMT convention inverts the sign: UTC-3 -> Etc/GMT+3.
+    Google rejects Etc/GMT* zones, so we map to geographic zones that don't observe DST.
     """
     if tz == "UTC":
         return "Etc/UTC"
-    import re
-    m = re.match(r"^UTC([+-])(\d{1,2})$", tz)
-    if m:
-        sign = "+" if m.group(1) == "-" else "-"
-        offset = m.group(2).zfill(2)
-        return f"Etc/GMT{sign}{offset}"
-    return "Etc/UTC"
+    _OFFSET_MAP = {
+        "UTC-12": "Pacific/Kiritimati",
+        "UTC-11": "Pacific/Pago_Pago",
+        "UTC-10": "Pacific/Honolulu",
+        "UTC-9": "Pacific/Gambier",
+        "UTC-8": "Pacific/Pitcairn",
+        "UTC-7": "America/Creston",
+        "UTC-6": "Pacific/Galapagos",
+        "UTC-5": "America/Cayman",
+        "UTC-4": "America/Manaus",
+        "UTC-3": "America/Sao_Paulo",
+        "UTC-2": "Atlantic/South_Georgia",
+        "UTC-1": "Atlantic/Cape_Verde",
+        "UTC+1": "Africa/Monrovia",
+        "UTC+2": "Africa/Khartoum",
+        "UTC+3": "Africa/Khartoum",
+        "UTC+4": "Asia/Dubai",
+        "UTC+5": "Asia/Yekaterinburg",
+        "UTC+6": "Asia/Thimphu",
+        "UTC+7": "Asia/Bangkok",
+        "UTC+8": "Asia/Singapore",
+        "UTC+9": "Asia/Seoul",
+        "UTC+10": "Pacific/Port_Moresby",
+        "UTC+11": "Pacific/Noumea",
+        "UTC+12": "Pacific/Funafuti",
+    }
+    return _OFFSET_MAP.get(tz, "Etc/UTC")
 
 
 def create_event(service, summary, start, end, location=None, description=None, user_tz=None):
@@ -260,7 +287,7 @@ def create_event(service, summary, start, end, location=None, description=None, 
 
 
 def edit_event(service, event_id, summary=None, start=None, end=None, location=None, description=None, user_tz=None):
-    print(f"[QW-G070] edit_event: event_id={event_id}")
+    print(f"[QW-G070] edit_event: event_id={event_id}, user_tz={user_tz}")
     try:
         existing = service.events().get(calendarId="primary", eventId=event_id).execute()
         print(f"[QW-G071] edit_event: fetched event '{existing.get('summary')}'")
@@ -269,36 +296,36 @@ def edit_event(service, event_id, summary=None, start=None, end=None, location=N
             print(f"[QW-G072] edit_event: NOT FOUND event_id={event_id}")
             raise KeyError(f"Event {event_id} not found")
         raise
-    if summary is not None:
-        existing["summary"] = summary
-    if start is not None:
-        start_obj = existing.get("start", {})
-        if "T" in start:
-            dt = _strip_offset(start) if user_tz else start
-            existing["start"] = {"dateTime": dt}
-            if user_tz:
-                existing["start"]["timeZone"] = _tz_to_iana(user_tz)
-        else:
-            existing["start"] = {"date": start}
-        if "timeZone" in start_obj and "timeZone" not in existing.get("start", {}):
-            existing["start"]["timeZone"] = start_obj["timeZone"]
-    if end is not None:
-        end_obj = existing.get("end", {})
-        if "T" in end:
-            dt = _strip_offset(end) if user_tz else end
-            existing["end"] = {"dateTime": dt}
-            if user_tz:
-                existing["end"]["timeZone"] = _tz_to_iana(user_tz)
-        else:
-            existing["end"] = {"date": end}
-        if "timeZone" in end_obj and "timeZone" not in existing.get("end", {}):
-            existing["end"]["timeZone"] = end_obj["timeZone"]
-    if location is not None:
-        existing["location"] = location
-    if description is not None:
-        existing["description"] = description
-    print("[QW-G073] edit_event: updating event")
-    updated = service.events().update(calendarId="primary", eventId=event_id, body=existing).execute()
+
+    event_body = _to_gapi_event(summary, start, end, location, description, user_tz)
+    if not event_body:
+        return existing
+
+    # Detect all-day <-> timed type conversion — requires full body update, not patch
+    existing_is_allday = "date" in existing.get("start", {})
+    new_is_timed = start is not None and "T" in start
+    new_is_allday = start is not None and "T" not in start
+
+    if (existing_is_allday and new_is_timed) or (not existing_is_allday and new_is_allday):
+        # Merge partial update into full body, removing conflicting date/dateTime fields
+        merged = dict(existing)
+        merged.update(event_body)
+        # Clear old type fields to avoid date+dateTime conflict
+        if "start" in merged:
+            if "dateTime" in merged["start"]:
+                merged["start"].pop("date", None)
+            else:
+                merged["start"].pop("dateTime", None)
+        if "end" in merged:
+            if "dateTime" in merged["end"]:
+                merged["end"].pop("date", None)
+            else:
+                merged["end"].pop("dateTime", None)
+        print("[QW-G073] edit_event: type conversion, using update")
+        updated = service.events().update(calendarId="primary", eventId=event_id, body=merged).execute()
+    else:
+        print("[QW-G073] edit_event: updating event")
+        updated = service.events().patch(calendarId="primary", eventId=event_id, body=event_body).execute()
     print(f"[QW-G074] edit_event: success, event_id={updated['id']}")
     return updated
 

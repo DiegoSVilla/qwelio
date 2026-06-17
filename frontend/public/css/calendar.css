@@ -4,17 +4,18 @@
    ============================================================ */
 
 .calendar-grid-wrapper {
-  flex: 1;
+  flex: 4 0 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 0;
 }
 
 .calendar-nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
 }
 
 .calendar-nav-btn {
@@ -49,31 +50,33 @@
 
 .calendar-weekday {
   text-align: center;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   color: var(--color-text-muted);
   text-transform: uppercase;
-  padding: var(--spacing-xs) 0;
+  padding: 2px 0;
 }
 
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
+  gap: 3px;
+  flex: 1;
+  min-height: 0;
 }
 
 .calendar-day {
-  aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: var(--spacing-xs);
+  padding: 2px;
   background: var(--color-surface-alt);
   border: 2px solid var(--color-border);
   cursor: pointer;
   position: relative;
   transition: border-color 0.1s;
-  min-height: 48px;
+  min-height: 28px;
+  overflow: hidden;
 }
 
 .calendar-day:hover {
@@ -110,7 +113,7 @@
 }
 
 .calendar-day-number {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   color: var(--color-text);
   font-weight: bold;
 }
@@ -121,18 +124,48 @@
 
 .calendar-day-dots {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   margin-top: auto;
-  padding-top: var(--spacing-xs);
+  padding-top: 2px;
 }
 
 .calendar-dot {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
   background: var(--color-accent);
   display: inline-block;
 }
 
 .calendar-dot.all-day {
   background: var(--color-text-dim);
+}
+
+/* Event bars in calendar day cells */
+.calendar-day-bars {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 2px 2px 2px;
+}
+
+.calendar-event-bar {
+  height: 4px;
+  background: var(--color-accent);
+  position: relative;
+  transition: opacity 0.1s;
+}
+
+.calendar-event-bar.all-day {
+  background: var(--color-text-dim);
+}
+
+.calendar-more {
+  font-size: 0.55rem;
+  color: var(--color-text-dim);
+  text-align: center;
+  line-height: 1;
 }

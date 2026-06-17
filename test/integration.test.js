@@ -211,8 +211,8 @@ async function run() {
 
     // === Test 8: Static assets work ===
     console.log("\n  Static assets:");
-    const cssRes = await client.get(`http://localhost:${FRONTEND_PORT}/style.css`);
-    assert(cssRes.status === 200, "style.css is served");
+    const cssRes = await client.get(`http://localhost:${FRONTEND_PORT}/css/tokens.css`);
+    assert(cssRes.status === 200, "tokens.css is served");
 
     // === Test 9: Logout clears session ===
     console.log("\n  Logout:");

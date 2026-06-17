@@ -508,6 +508,15 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
         content, new_msgs = await chat_with_tools(messages, tool_defs)
         print(f"[QW-B013] api_chat: LLM response received, content length={len(content) if content else 0}, new_msgs={len(new_msgs)}")
 
+        # Collect tool call names from the conversation loop
+        tool_calls = []
+        for msg in new_msgs:
+            if msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    tc_data = tc if isinstance(tc, dict) else tc.model_dump()
+                    fn = tc_data.get("function", {})
+                    tool_calls.append(fn.get("name", "unknown"))
+
         turns = [(m.role, m.content, None, None) for m in req.messages]
         for msg in new_msgs:
             turns.append((msg["role"], msg.get("content"), msg.get("tool_calls"), msg.get("tool_call_id")))
@@ -515,7 +524,7 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
         await save_turns(user.id, turns)
         print("[QW-B015] api_chat: turns saved, returning response")
 
-        return {"content": content}
+        return {"content": content, "tool_calls": tool_calls}
     except LLMError as e:
         print(f"[QW-B016] api_chat: LLMError: {e}")
         return {"error": str(e)}
@@ -629,6 +638,7 @@ async def create_calendar_event(resp: Response, req: EventCreateRequest, user: U
     try:
         service = get_service()
         try:
+            user_tz = await get_user_timezone(user.id)
             event = create_event(
                 service,
                 req.summary,
@@ -636,6 +646,7 @@ async def create_calendar_event(resp: Response, req: EventCreateRequest, user: U
                 req.end,
                 req.location,
                 req.description,
+                user_tz=user_tz,
             )
             resp.status_code = 201
             return {"id": event["id"], "status": event.get("status", "confirmed")}
@@ -650,6 +661,7 @@ async def edit_calendar_event(event_id: str, req: EventUpdateRequest, user: User
     try:
         service = get_service()
         try:
+            user_tz = await get_user_timezone(user.id)
             updated = edit_event(
                 service,
                 event_id,
@@ -658,6 +670,7 @@ async def edit_calendar_event(event_id: str, req: EventUpdateRequest, user: User
                 req.end,
                 req.location,
                 req.description,
+                user_tz=user_tz,
             )
             return {"id": updated["id"]}
         except KeyError:

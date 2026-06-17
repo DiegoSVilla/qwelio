@@ -55,6 +55,8 @@ html {
   font-size: 14px;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: auto;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -62,8 +64,8 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   line-height: 1.5;
-  min-height: 100vh;
-  overflow-x: hidden;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Scanline overlay */
@@ -172,9 +174,10 @@ h1, h2, h3, h4 {
   max-width: 1600px;
   margin: 0 auto;
   padding: var(--spacing-md);
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .app-hidden {
@@ -222,8 +225,9 @@ header h1 {
 .dashboard {
   display: grid;
   grid-template-columns: 60% 40%;
+  grid-template-rows: 1fr;
   gap: var(--spacing-lg);
-  flex: 1;
+  flex: 1 0 0;
   min-height: 0;
 }
 
@@ -232,12 +236,14 @@ header h1 {
   flex-direction: column;
   gap: var(--spacing-lg);
   min-height: 0;
+  overflow: hidden;
 }
 
 .chat-column {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* Panel base */
@@ -533,8 +539,9 @@ header h1 {
 .chat-panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .chat-messages {

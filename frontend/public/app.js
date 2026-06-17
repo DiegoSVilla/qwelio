@@ -19,7 +19,7 @@ document.getElementById("cal-next-btn").addEventListener("click", () => navigate
     initChat();
     initSettings();
     await checkCalendarStatus();
-    initOnboarding();
+    await loadChatHistory();
     todayInterval = setInterval(loadMonthEvents, 60000);
   }
 })();

@@ -158,7 +158,7 @@ class TestProtectedRoutes:
                         "messages": [{"role": "user", "content": "Hi"}]
                     })
                     assert resp.status_code == 200
-                    assert resp.json() == {"content": "Hello!"}
+                    assert resp.json() == {"content": "Hello!", "tool_calls": []}
 
     @pytest.mark.asyncio
     async def test_calendar_today_unauthenticated(self, client):
@@ -832,8 +832,8 @@ class TestGcalendarWriteFunctions:
     def test_edit_event_success(self):
         from gcalendar import edit_event
         mock_service = MagicMock()
-        mock_service.events.return_value.get.return_value.execute.return_value = {"id": "evt-123", "summary": "Old"}
-        mock_service.events.return_value.update.return_value.execute.return_value = {"id": "evt-123", "summary": "New"}
+        mock_service.events.return_value.get.return_value.execute.return_value = {"id": "evt-123", "summary": "Old", "start": {"date": "2025-01-01"}, "end": {"date": "2025-01-02"}}
+        mock_service.events.return_value.patch.return_value.execute.return_value = {"id": "evt-123", "summary": "New"}
         result = edit_event(mock_service, "evt-123", summary="New")
         assert result["summary"] == "New"
 
@@ -1070,3 +1070,34 @@ class TestConversationEndpoints:
             resp = await auth_client.post("/api/conversations/summarize")
             assert resp.status_code == 200
             assert resp.json()["error"] == "cooldown"
+
+    @pytest.mark.asyncio
+    async def test_gcalendar_imports_parse_tz_offset(self):
+        """Verify gcalendar can import _parse_tz_offset from prompt (no NameError)."""
+        from gcalendar import _parse_tz_offset
+        assert _parse_tz_offset("UTC-3") == -3
+        assert _parse_tz_offset("UTC+5") == 5
+        assert _parse_tz_offset("UTC+0") == 0
+
+    @pytest.mark.asyncio
+    async def test_create_event_with_tz_no_name_error(self, auth_client):
+        """Verify create_event doesn't raise NameError for _parse_tz_offset."""
+        with patch("main.get_service") as mock_get_service:
+            mock_service = MagicMock()
+            mock_events = MagicMock()
+            mock_service.events.return_value = mock_events
+            mock_events.list.return_value.execute.return_value = {"items": []}
+            mock_events.insert.return_value.execute.return_value = {
+                "id": "test-event-1", "summary": "Team Meeting",
+                "start": {"dateTime": "2025-07-01T10:00:00-03:00"},
+                "end": {"dateTime": "2025-07-01T11:00:00-03:00"}
+            }
+            mock_get_service.return_value = mock_service
+            resp = await auth_client.post("/api/calendar/events", json={
+                "summary": "Team Meeting",
+                "start": "2025-07-01T10:00:00",
+                "end": "2025-07-01T11:00:00"
+            })
+            assert resp.status_code == 201
+            data = resp.json()
+            assert data["id"] == "test-event-1"
