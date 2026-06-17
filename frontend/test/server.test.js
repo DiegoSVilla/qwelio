@@ -65,7 +65,7 @@ async function run() {
     assert(res.headers["content-type"].includes("html"), "Content-Type is HTML");
     assert(res.body.includes("<title>Qwelio</title>"), "Contains Qwelio title");
     assert(res.body.includes('<script src="/app.js"></script>'), "References app.js");
-    assert(res.body.includes('<link rel="stylesheet" href="/style.css">'), "References style.css");
+    assert(res.body.includes('<link rel="stylesheet" href="/css/tokens.css">'), "References tokens.css");
   } catch (e) {
     failed += 5;
     console.error(`  ✗ GET / (authenticated) failed: ${e.message}`);
@@ -106,13 +106,13 @@ async function run() {
   // Test 4: serves CSS
   console.log("\n  Static assets:");
   try {
-    const res = await request(PORT, "/style.css");
-    assert(res.status === 200, "GET /style.css returns 200");
+    const res = await request(PORT, "/css/layout.css");
+    assert(res.status === 200, "GET /css/layout.css returns 200");
     assert(res.headers["content-type"].includes("css"), "Content-Type is CSS");
     assert(res.body.includes(".container"), "CSS contains .container rule");
   } catch (e) {
     failed += 3;
-    console.error(`  ✗ GET /style.css failed: ${e.message}`);
+    console.error(`  ✗ GET /css/layout.css failed: ${e.message}`);
   }
 
   // Test 5: serves JS modules

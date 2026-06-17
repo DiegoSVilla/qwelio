@@ -22,6 +22,68 @@ function addMessage(role, content) {
   container.scrollTop = container.scrollHeight;
 }
 
+function addToolCall(toolName) {
+  const container = document.getElementById("chat-messages");
+  const div = createEl("div", "chat-message tool-call");
+
+  const prefix = createEl("span", "msg-prefix");
+  prefix.textContent = "[tool] ";
+  div.appendChild(prefix);
+
+  const contentEl = createEl("span", "msg-content");
+  contentEl.textContent = toolName;
+  div.appendChild(contentEl);
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function addSummaryMessage(period, periodStart, content) {
+  const container = document.getElementById("chat-messages");
+  const div = createEl("div", "chat-message summary");
+
+  const prefix = createEl("span", "msg-prefix");
+  const periodLabel = period === "monthly" ? "MONTH" : period === "weekly" ? "WEEK" : "DAY";
+  prefix.textContent = `[${periodLabel}]`;
+  div.appendChild(prefix);
+
+  const contentEl = createEl("span", "msg-content");
+  contentEl.textContent = content;
+  div.appendChild(contentEl);
+
+  if (container.firstChild) {
+    container.insertBefore(div, container.firstChild);
+  } else {
+    container.appendChild(div);
+  }
+}
+
+async function loadChatHistory() {
+  const container = document.getElementById("chat-messages");
+  try {
+    const limit = 20;
+    const res = await fetch(`${API}/conversations?limit=${limit}`, { credentials: "include" });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (data.history && data.history.length) {
+      data.history.forEach(msg => {
+        if (msg.role === "user" && msg.content) {
+          addMessage("user", msg.content);
+          chatHistory.push({ role: "user", content: msg.content });
+        } else if (msg.role === "assistant" && msg.content) {
+          addMessage("assistant", msg.content);
+          chatHistory.push({ role: "assistant", content: msg.content });
+        }
+      });
+      return;
+    }
+  } catch (err) {
+    qwlog("QW-F060", `loadChatHistory: exception: ${err.message}`);
+  }
+  initOnboarding();
+}
+
 const SUGGESTIONS = {
   disconnected: ["Connect your calendar", "What can Qwelio do?", "How does this work?"],
   connected: ["What do I have today?", "Schedule a meeting for tomorrow at 2pm", "Show my week"],
@@ -66,16 +128,32 @@ function initOnboarding() {
 }
 
 function initChat() {
+  const input = document.getElementById("chat-input");
+
+  function autoResize() {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 120) + "px";
+  }
+
+  input.addEventListener("input", autoResize);
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById("chat-form").requestSubmit();
+    }
+  });
+
   document.getElementById("chat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     if (chatLoading) return;
 
-    const input = document.getElementById("chat-input");
     const text = input.value.trim();
     if (!text) return;
 
     qwlog("QW-F050", `Chat submit: "${text.substring(0, 80)}"`);
     input.value = "";
+    autoResize();
     chatLoading = true;
     document.getElementById("chat-form").querySelector("button").disabled = true;
 
@@ -100,6 +178,13 @@ function initChat() {
         addMessage("system", data.error);
       } else {
         qwlog("QW-F055", `Chat: success, response length=${data.content ? data.content.length : 0}`);
+      if (data.tool_calls && data.tool_calls.length) {
+        data.tool_calls.forEach(tc => addToolCall(tc));
+        const calendarTools = new Set(["create_event", "edit_event", "delete_event"]);
+        if (data.tool_calls.some(tc => calendarTools.has(tc))) {
+          loadMonthEvents();
+        }
+      }
         addMessage("assistant", data.content);
         chatHistory.push({ role: "assistant", content: data.content });
       }

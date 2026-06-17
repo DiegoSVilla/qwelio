@@ -4,7 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Qwelio</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/loading.css">
+  <link rel="stylesheet" href="/css/layout.css">
+  <link rel="stylesheet" href="/css/calendar.css">
+  <link rel="stylesheet" href="/css/day-detail.css">
+  <link rel="stylesheet" href="/css/chat.css">
+  <link rel="stylesheet" href="/css/settings.css">
+  <link rel="stylesheet" href="/css/login.css">
 </head>
 <body>
   <div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite">
@@ -48,7 +55,7 @@
           <div class="panel-title">Chat</div>
           <div id="chat-messages" class="chat-messages"></div>
           <form id="chat-form" class="chat-form">
-            <input type="text" id="chat-input" class="chat-input" placeholder="Ask something..." autocomplete="off">
+            <textarea id="chat-input" class="chat-input" placeholder="Ask something..." autocomplete="off" rows="1"></textarea>
             <button type="submit" class="chat-send-btn">Send</button>
           </form>
         </div>

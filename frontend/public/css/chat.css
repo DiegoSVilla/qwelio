@@ -6,8 +6,9 @@
 .chat-panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .chat-messages {
@@ -46,10 +47,26 @@
   color: var(--color-text-dim);
 }
 
+.chat-message.tool-call {
+  border-left: 3px solid var(--color-warning);
+}
+
+.chat-message.tool-call .msg-prefix {
+  color: var(--color-warning);
+}
+
 .chat-message.system {
   border-left: 3px solid var(--color-error);
   color: var(--color-error);
   font-size: 0.8rem;
+}
+
+.chat-message.summary {
+  border-left: 3px solid #b388ff;
+}
+
+.chat-message.summary .msg-prefix {
+  color: #b388ff;
 }
 
 .msg-prefix {
@@ -128,6 +145,10 @@
   border: 2px solid var(--color-border);
   font-family: var(--font-mono);
   font-size: 0.85rem;
+  resize: none;
+  min-height: 36px;
+  max-height: 120px;
+  line-height: 1.4;
 }
 
 .chat-input:focus {
