@@ -30,7 +30,7 @@ class TestCalendarCallback:
             resp = await client.get("/api/calendar/callback", params={"state": auth_data["oauth_state"]})
             assert resp.status_code == 200
             assert "Success!" in resp.text
-            assert "Calendar authorized" in resp.text
+            assert "Calendar connected" in resp.text
             call_arg = mock_auth.call_args[0][0]
             assert "/api/calendar/callback" in call_arg
             assert "state=" in call_arg

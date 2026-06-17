@@ -5,7 +5,8 @@ An AI-powered calendar assistant that understands natural language and acts on y
 ## Architecture
 
 - **Backend**: Python FastAPI (port 8000) — LLM chat, Google Calendar API, authentication
-- **Frontend**: Node Express (port 3000) — static dashboard with week view, today's events, chat panel
+- **Frontend**: Node Express (port 3000) — static dashboard + API proxy to backend. Only port 3000 is exposed.
+- Frontend uses relative `/api/*` paths; Express proxies to backend, converting cookies for cross-port compatibility
 - **LLM**: OpenAI-compatible client (Qwen API) with lazy initialization
 - **Calendar**: Google Calendar OAuth2 with read/write scope (`calendar.events`)
 
@@ -63,7 +64,7 @@ MODEL_NAME=google/gemma-4-12B-it-qat-w4a16-ct
 # Google Calendar (required for calendar features)
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/calendar/callback
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/calendar/callback
 
 # Authentication (optional — auto-generated if omitted)
 SESSION_SECRET=your-session-secret
@@ -91,7 +92,7 @@ HTTPS_ONLY=false
 | `MODEL_NAME` | Yes | `google/gemma-4-12B-it-qat-w4a16-ct` | Model to use for inference |
 | `GOOGLE_CLIENT_ID` | Calendar only | — | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Calendar only | — | Google OAuth client secret |
-| `GOOGLE_REDIRECT_URI` | Calendar only | `http://localhost:8000/api/calendar/callback` | OAuth redirect URI |
+| `GOOGLE_REDIRECT_URI` | Calendar only | `http://localhost:3000/api/calendar/callback` | OAuth redirect URI (must match public-facing URL) |
 | `SESSION_SECRET` | No | auto-generated | Secret for signing session cookies |
 | `LLM_TEMPERATURE` | No | `0.6` | Sampling temperature (0.0–2.0) |
 | `LLM_TIMEOUT` | No | `30.0` | Request timeout in seconds (1–300) |

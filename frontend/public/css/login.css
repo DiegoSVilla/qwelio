@@ -1,0 +1,102 @@
+/* ============================================================
+   Qwelio — Login Page
+   Terminal-style login form
+   ============================================================ */
+
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--spacing-md);
+}
+
+.login-terminal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-accent);
+  box-shadow: var(--shadow-offset) var(--shadow-color), 0 0 30px var(--color-accent-glow);
+  padding: var(--spacing-lg);
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.login-header h1 {
+  font-size: 1rem;
+  color: var(--color-accent);
+  text-shadow: 0 0 10px var(--color-accent-glow);
+  margin-bottom: var(--spacing-sm);
+}
+
+.login-header p {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.login-field label {
+  font-size: 0.7rem;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+.login-field input {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.login-field input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.login-submit {
+  font-family: var(--font-header);
+  font-size: 0.7rem;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border: 2px solid var(--color-accent);
+  cursor: pointer;
+  text-transform: uppercase;
+  margin-top: var(--spacing-sm);
+}
+
+.login-submit:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.login-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.login-error {
+  color: var(--color-error);
+  font-size: 0.75rem;
+  padding: var(--spacing-sm);
+  border: 2px solid var(--color-error);
+  background: rgba(255, 68, 68, 0.1);
+  display: none;
+}

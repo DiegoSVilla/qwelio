@@ -1,0 +1,154 @@
+/* ============================================================
+   Qwelio — Settings Modal
+   Overlay + dialog with form controls
+   ============================================================ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-overlay);
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 2px solid var(--color-accent);
+  box-shadow: var(--shadow-offset) var(--shadow-color), 0 0 20px var(--color-accent-glow);
+  padding: var(--spacing-lg);
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-title {
+  font-family: var(--font-header);
+  font-size: 0.7rem;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.modal-close {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  color: var(--color-accent);
+}
+
+/* Form controls in modal */
+.settings-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.settings-group label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  margin-bottom: var(--spacing-xs);
+  text-transform: uppercase;
+}
+
+.settings-group select,
+.settings-group input[type="text"],
+.settings-group input[type="number"] {
+  width: 100%;
+  padding: var(--spacing-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.settings-group select:focus,
+.settings-group input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.settings-group select {
+  cursor: pointer;
+}
+
+.settings-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 2px solid var(--color-border);
+}
+
+.settings-btn {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.settings-btn.primary {
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.settings-btn.primary:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.settings-btn.danger {
+  background: transparent;
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.settings-btn.danger:hover {
+  background: var(--color-error);
+  color: var(--color-bg);
+}
+
+.settings-btn.secondary {
+  background: var(--color-surface-alt);
+  color: var(--color-text-dim);
+}
+
+.settings-btn.secondary:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-dim);
+}
+
+.settings-section-label {
+  font-family: var(--font-header);
+  font-size: 0.55rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin: var(--spacing-lg) 0 var(--spacing-sm);
+  letter-spacing: 0.1em;
+}
+
+.settings-danger-zone {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 2px solid var(--color-error);
+}
+
+.settings-danger-zone .settings-section-label {
+  color: var(--color-error);
+}
