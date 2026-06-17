@@ -32,10 +32,10 @@ class ToolRegistry:
         handler = cls._handlers[name]
         try:
             if inspect.iscoroutinefunction(handler):
-                result = await asyncio.wait_for(handler(**arguments), timeout=10.0)
+                result = await asyncio.wait_for(handler(**arguments), timeout=30.0)
             else:
                 coro = asyncio.to_thread(handler, **arguments)
-                result = await asyncio.wait_for(coro, timeout=10.0)
+                result = await asyncio.wait_for(coro, timeout=30.0)
             if isinstance(result, dict):
                 try:
                     return json.dumps(result)

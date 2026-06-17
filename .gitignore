@@ -15,8 +15,7 @@ node_modules/
 # Secrets
 .env
 
-# Calendar token
-backend/.calendar_token.json
+# Calendar tokens (per-user, stored in SQLite)
 
 # Session secret
 backend/.session_secret

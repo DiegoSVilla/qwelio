@@ -39,7 +39,8 @@ Qwelio is an AI-powered calendar assistant. The LLM agent is **time-aware** and 
 - OAuth flow: navigate to `/api/calendar/auth`, callback at `/api/calendar/callback`
 - OAuth credentials in `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
 - `GOOGLE_REDIRECT_URI` must match the public-facing URL (e.g., `http://localhost:3000/api/calendar/callback`)
-- Tokens stored in `backend/.calendar_token.json` (gitignored, chmod 0600)
+- Tokens stored per-user in SQLite `calendar_tokens` table (via `storage.py`)
+- Legacy `.calendar_token.json` auto-migrates to admin user on first startup, then is deleted
 - `NotAuthenticated` exception — caught at endpoint level to return `{"auth_required": True, "auth_url": ...}` instead of 401, so unauthenticated clients get a friendly redirect hint
 - **Read/write** (`calendar.events` scope) — create, edit, delete supported
 - **PKCE flow**: `google-auth-oauthlib` enforces PKCE by default. The `code_verifier` is generated inside `flow.authorization_url()` and must be captured, stored in the user session, and passed to `auth_flow()` on callback.

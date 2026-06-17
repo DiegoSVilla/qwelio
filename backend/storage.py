@@ -52,6 +52,20 @@ async def init_db():
             await conn.execute("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'UTC'")
         except Exception:
             pass  # Column already exists
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS calendar_tokens (
+                user_id TEXT PRIMARY KEY,
+                token TEXT NOT NULL,
+                refresh_token TEXT,
+                token_uri TEXT,
+                client_id TEXT,
+                client_secret TEXT,
+                scopes TEXT,
+                expiry TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_turn ON conversations(user_id, turn_order)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_timestamp ON conversations(timestamp)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_period ON summaries(user_id, period, period_start)")
@@ -233,6 +247,113 @@ async def get_summaries(user_id: str) -> dict:
         "weekly": [_to_dict(r) for r in weekly[:4]],
         "daily": [_to_dict(r) for r in daily[:7]],
     }
+
+
+# --- Calendar token storage (per-user) ---
+
+async def save_calendar_token(user_id: str, token_data: dict):
+    """Save or update a user's Google Calendar OAuth token.
+
+    token_data: dict with keys token, refresh_token, token_uri, client_id, client_secret, scopes
+    """
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """INSERT INTO calendar_tokens (user_id, token, refresh_token, token_uri, client_id, client_secret, scopes, expiry, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(user_id) DO UPDATE SET
+                token = excluded.token,
+                refresh_token = excluded.refresh_token,
+                token_uri = excluded.token_uri,
+                client_id = excluded.client_id,
+                client_secret = excluded.client_secret,
+                scopes = excluded.scopes,
+                expiry = excluded.expiry,
+                updated_at = datetime('now')""",
+            (
+                user_id,
+                token_data.get("token", ""),
+                token_data.get("refresh_token"),
+                token_data.get("token_uri"),
+                token_data.get("client_id"),
+                token_data.get("client_secret"),
+                json.dumps(token_data.get("scopes", [])),
+                token_data.get("expiry"),
+            ),
+        )
+        await conn.commit()
+
+
+async def get_calendar_token(user_id: str) -> dict | None:
+    """Get a user's Google Calendar OAuth token data. Returns dict or None."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute(
+            "SELECT token, refresh_token, token_uri, client_id, client_secret, scopes, expiry FROM calendar_tokens WHERE user_id = ?",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+    if not row:
+        return None
+    scopes = json.loads(row[5]) if row[5] else []
+    return {
+        "token": row[0],
+        "refresh_token": row[1],
+        "token_uri": row[2],
+        "client_id": row[3],
+        "client_secret": row[4],
+        "scopes": scopes,
+        "expiry": row[6],
+    }
+
+
+async def delete_calendar_token(user_id: str):
+    """Delete a user's Google Calendar OAuth token."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("DELETE FROM calendar_tokens WHERE user_id = ?", (user_id,))
+        await conn.commit()
+
+
+async def has_calendar_token(user_id: str) -> bool:
+    """Check if a user has a stored calendar token."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute(
+            "SELECT 1 FROM calendar_tokens WHERE user_id = ?",
+            (user_id,),
+        )
+        return await cursor.fetchone() is not None
+
+
+async def migrate_global_token_file():
+    """Migration: move existing global .calendar_token.json to admin user's row."""
+    import pathlib
+    token_path = pathlib.Path(__file__).parent / ".calendar_token.json"
+    if not token_path.exists():
+        return False
+    try:
+        data = json.loads(token_path.read_text())
+        async with aiosqlite.connect(DB_PATH) as conn:
+            cursor = await conn.execute("SELECT id FROM users WHERE username = ?", ("admin",))
+            row = await cursor.fetchone()
+            if row:
+                user_id = str(row[0])
+                scopes = data.get("scopes", [])
+                await conn.execute(
+                    """INSERT OR IGNORE INTO calendar_tokens (user_id, token, refresh_token, token_uri, client_id, client_secret, scopes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL)""",
+                    (
+                        user_id,
+                        data.get("token", ""),
+                        data.get("refresh_token"),
+                        data.get("token_uri"),
+                        data.get("client_id"),
+                        data.get("client_secret"),
+                        json.dumps(scopes),
+                    ),
+                )
+                await conn.commit()
+        token_path.unlink(missing_ok=True)
+        return True
+    except Exception:
+        return False
 
 
 async def get_pending_summaries(user_id: str) -> list[tuple[str, str, str]]:

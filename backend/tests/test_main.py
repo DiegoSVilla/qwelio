@@ -167,7 +167,7 @@ class TestProtectedRoutes:
 
     @pytest.mark.asyncio
     async def test_calendar_today_authenticated(self, auth_client):
-        with patch("main.get_service") as mock_get:
+        with patch("main.get_service", new_callable=AsyncMock) as mock_get:
             with patch("main.get_today_events", return_value=[]):
                 mock_get.return_value = MagicMock()
                 resp = await auth_client.get("/api/calendar/today")
@@ -181,7 +181,7 @@ class TestProtectedRoutes:
 
     @pytest.mark.asyncio
     async def test_calendar_week_authenticated(self, auth_client):
-        with patch("main.get_service") as mock_get:
+        with patch("main.get_service", new_callable=AsyncMock) as mock_get:
             with patch("main.list_events", return_value=[]):
                 mock_get.return_value = MagicMock()
                 resp = await auth_client.get("/api/calendar/week")
@@ -193,7 +193,7 @@ class TestCalendarNotAuthenticated:
     """Calendar OAuth not authenticated (different from user auth)."""
     @pytest.mark.asyncio
     async def test_calendar_today_not_auth(self, auth_client):
-        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
             resp = await auth_client.get("/api/calendar/today")
             assert resp.status_code == 200
             data = resp.json()
@@ -202,7 +202,7 @@ class TestCalendarNotAuthenticated:
 
     @pytest.mark.asyncio
     async def test_calendar_week_not_auth(self, auth_client):
-        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
             resp = await auth_client.get("/api/calendar/week")
             assert resp.status_code == 200
             data = resp.json()
@@ -211,7 +211,7 @@ class TestCalendarNotAuthenticated:
 
     @pytest.mark.asyncio
     async def test_calendar_auth_not_auth(self, auth_client):
-        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
             resp = await auth_client.get("/api/calendar/auth")
             assert resp.status_code == 200
             data = resp.json()
@@ -234,7 +234,7 @@ class TestCalendarAuthenticated:
         mock_service = MagicMock()
         mock_events = [{"summary": "Test Event", "start": {"dateTime": "2025-01-01T10:00:00Z"}}]
 
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             with patch("main.get_today_events", return_value=mock_events) as mock_today:
                 resp = await client_cal.get("/api/calendar/today")
                 assert resp.status_code == 200
@@ -247,7 +247,7 @@ class TestCalendarAuthenticated:
         mock_service = MagicMock()
         mock_events = [{"summary": "Meeting", "start": {"dateTime": "2025-01-01T09:00:00Z"}}]
 
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             with patch("main.list_events", return_value=mock_events) as mock_list:
                 resp = await client_cal.get("/api/calendar/week")
                 assert resp.status_code == 200
@@ -258,7 +258,7 @@ class TestCalendarAuthenticated:
     @pytest.mark.asyncio
     async def test_calendar_auth_already_authenticated(self, client_cal):
         mock_service = MagicMock()
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             resp = await client_cal.get("/api/calendar/auth")
             assert resp.status_code == 200
             assert resp.json() == {"error": "Already authenticated"}
@@ -470,14 +470,14 @@ class TestRateLimiter:
 class TestCalendarStatus:
     @pytest.mark.asyncio
     async def test_calendar_status_connected(self, auth_client):
-        with patch("main.get_service", return_value=MagicMock()):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=MagicMock()):
             resp = await auth_client.get("/api/calendar/status")
             assert resp.status_code == 200
             assert resp.json()["connected"] is True
 
     @pytest.mark.asyncio
     async def test_calendar_status_not_connected(self, auth_client):
-        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
             resp = await auth_client.get("/api/calendar/status")
             assert resp.status_code == 200
             data = resp.json()
@@ -493,7 +493,7 @@ class TestCalendarStatus:
 class TestCalendarMonth:
     @pytest.mark.asyncio
     async def test_calendar_month_success(self, auth_client):
-        with patch("main.get_service", return_value=MagicMock()):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=MagicMock()):
             with patch("main.get_month_events", return_value=[{"summary": "Test"}]):
                 resp = await auth_client.get("/api/calendar/month?year=2025&month=6")
                 assert resp.status_code == 200
@@ -501,7 +501,7 @@ class TestCalendarMonth:
 
     @pytest.mark.asyncio
     async def test_calendar_month_not_auth(self, auth_client):
-        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
             resp = await auth_client.get("/api/calendar/month?year=2025&month=6")
             assert resp.status_code == 200
             assert resp.json()["auth_required"] is True
@@ -515,14 +515,14 @@ class TestCalendarMonth:
 class TestCalendarDisconnect:
     @pytest.mark.asyncio
     async def test_disconnect_calendar(self, auth_client):
-        with patch("main.disconnect_calendar", return_value={"disconnected": True}):
+        with patch("main.disconnect_calendar", new_callable=AsyncMock, return_value={"disconnected": True}):
             resp = await auth_client.delete("/api/calendar/disconnect")
             assert resp.status_code == 200
             assert resp.json()["disconnected"] is True
 
     @pytest.mark.asyncio
     async def test_disconnect_not_connected(self, auth_client):
-        with patch("main.disconnect_calendar", return_value={"error": "Calendar not connected"}):
+        with patch("main.disconnect_calendar", new_callable=AsyncMock, return_value={"error": "Calendar not connected"}):
             resp = await auth_client.delete("/api/calendar/disconnect")
             assert resp.status_code == 200
             assert "error" in resp.json()
@@ -621,7 +621,7 @@ class TestCalendarWriteEndpoints:
     async def test_create_event_success(self, auth_client):
         mock_service = MagicMock()
         mock_event = {"id": "evt-123", "status": "confirmed"}
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             with patch("main.create_event", return_value=mock_event):
                 resp = await auth_client.post("/api/calendar/events", json={
                     "summary": "Meeting",
@@ -638,7 +638,7 @@ class TestCalendarWriteEndpoints:
     @pytest.mark.asyncio
     async def test_create_event_duplicate(self, auth_client):
         mock_service = MagicMock()
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             with patch("main.create_event", side_effect=ValueError("Duplicate event: Meeting")):
                 resp = await auth_client.post("/api/calendar/events", json={
                     "summary": "Meeting",
@@ -650,7 +650,7 @@ class TestCalendarWriteEndpoints:
 
     @pytest.mark.asyncio
     async def test_create_event_not_auth(self, auth_client):
-        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
             resp = await auth_client.post("/api/calendar/events", json={
                 "summary": "Meeting",
                 "start": "2025-01-01T10:00:00Z",
@@ -700,7 +700,7 @@ class TestCalendarWriteEndpoints:
     async def test_create_event_mixed_date_datetime(self, auth_client):
         mock_service = MagicMock()
         mock_event = {"id": "evt-mixed", "status": "confirmed"}
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             with patch("main.create_event", return_value=mock_event):
                 resp = await auth_client.post("/api/calendar/events", json={
                     "summary": "Test",
@@ -735,7 +735,7 @@ class TestCalendarWriteEndpoints:
     async def test_edit_event_success(self, auth_client):
         mock_service = MagicMock()
         mock_updated = {"id": "evt-123"}
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             with patch("main.edit_event", return_value=mock_updated):
                 resp = await auth_client.patch("/api/calendar/events/evt-123", json={
                     "summary": "Updated Meeting",
@@ -747,7 +747,7 @@ class TestCalendarWriteEndpoints:
     @pytest.mark.asyncio
     async def test_edit_event_not_found(self, auth_client):
         mock_service = MagicMock()
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             with patch("main.edit_event", side_effect=KeyError("Event evt-999 not found")):
                 resp = await auth_client.patch("/api/calendar/events/evt-999", json={
                     "summary": "Updated",
@@ -756,7 +756,7 @@ class TestCalendarWriteEndpoints:
 
     @pytest.mark.asyncio
     async def test_edit_event_not_auth(self, auth_client):
-        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
             resp = await auth_client.patch("/api/calendar/events/evt-123", json={
                 "summary": "Updated",
             })
@@ -771,7 +771,7 @@ class TestCalendarWriteEndpoints:
     @pytest.mark.asyncio
     async def test_delete_event_success(self, auth_client):
         mock_service = MagicMock()
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             with patch("main.delete_event") as mock_delete:
                 resp = await auth_client.delete("/api/calendar/events/evt-123")
                 assert resp.status_code == 200
@@ -781,14 +781,14 @@ class TestCalendarWriteEndpoints:
     @pytest.mark.asyncio
     async def test_delete_event_not_found(self, auth_client):
         mock_service = MagicMock()
-        with patch("main.get_service", return_value=mock_service):
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
             with patch("main.delete_event", side_effect=KeyError("Event evt-999 not found")):
                 resp = await auth_client.delete("/api/calendar/events/evt-999")
                 assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_delete_event_not_auth(self, auth_client):
-        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
             resp = await auth_client.delete("/api/calendar/events/evt-123")
             assert resp.status_code == 200
             assert resp.json()["auth_required"] is True
@@ -984,7 +984,7 @@ class TestConversationEndpoints:
         with patch("main.get_history", new_callable=AsyncMock) as mock_history:
             with patch("main.save_turns", new_callable=AsyncMock):
                 with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
-                    with patch("main.get_service"):
+                    with patch("main.get_service", new_callable=AsyncMock):
                         with patch("main.get_today_events") as mock_today:
                             with patch("main.list_events") as mock_week:
                                 mock_history.return_value = []
@@ -1006,7 +1006,7 @@ class TestConversationEndpoints:
         with patch("main.get_history", new_callable=AsyncMock) as mock_history:
             with patch("main.save_turns", new_callable=AsyncMock):
                 with patch("main.chat_with_tools", new_callable=AsyncMock) as mock_chat:
-                    with patch("main.get_service", side_effect=Exception("API error")):
+                    with patch("main.get_service", new_callable=AsyncMock, side_effect=Exception("API error")):
                         mock_history.return_value = []
                         mock_chat.return_value = ("OK", [])
                         resp = await auth_client.post("/api/chat", json={
@@ -1082,7 +1082,7 @@ class TestConversationEndpoints:
     @pytest.mark.asyncio
     async def test_create_event_with_tz_no_name_error(self, auth_client):
         """Verify create_event doesn't raise NameError for _parse_tz_offset."""
-        with patch("main.get_service") as mock_get_service:
+        with patch("main.get_service", new_callable=AsyncMock) as mock_get_service:
             mock_service = MagicMock()
             mock_events = MagicMock()
             mock_service.events.return_value = mock_events

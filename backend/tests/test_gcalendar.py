@@ -1,7 +1,7 @@
 import pytest
-import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
+import storage
 from gcalendar import (
     _format_events,
     get_service,
@@ -64,72 +64,50 @@ def test_not_authenticated_stores_url():
 
 
 class TestGetService:
-    def test_not_auth_when_no_creds(self, google_env_setup):
-        google_env_setup.unlink(missing_ok=True)
+    @pytest.mark.asyncio
+    async def test_not_auth_when_no_creds(self):
         with patch.dict("os.environ", {
             "GOOGLE_CLIENT_ID": "",
             "GOOGLE_CLIENT_SECRET": "",
         }):
-            with pytest.raises(NotAuthenticated):
-                get_service()
+            with patch("storage.get_calendar_token", new_callable=AsyncMock, return_value=None):
+                with pytest.raises(NotAuthenticated):
+                    await get_service("testuser")
 
-    def test_not_auth_when_no_google_env(self, google_env_setup):
-        google_env_setup.unlink(missing_ok=True)
+    @pytest.mark.asyncio
+    async def test_not_auth_when_no_google_env(self):
         with patch.dict("os.environ", {
             "GOOGLE_CLIENT_ID": "",
             "GOOGLE_CLIENT_SECRET": "",
         }):
-            with pytest.raises(NotAuthenticated) as exc_info:
-                get_service()
-            assert "GOOGLE_CLIENT_ID" in exc_info.value.auth_url
+            with patch("storage.get_calendar_token", new_callable=AsyncMock, return_value=None):
+                with pytest.raises(NotAuthenticated) as exc_info:
+                    await get_service("testuser")
+                assert "GOOGLE_CLIENT_ID" in exc_info.value.auth_url
 
-    def test_get_service_returns_service_when_creds_exist(self, token_file):
+    @pytest.mark.asyncio
+    async def test_get_service_returns_service_when_creds_exist(self, storage_token_mock):
         mock_service = MagicMock()
-        with patch("gcalendar.TOKEN_PATH", token_file):
-            with patch("gcalendar.Credentials") as MockCreds:
-                mock_creds = MagicMock()
-                mock_creds.valid = True
-                MockCreds.return_value = mock_creds
-                with patch("gcalendar.build", return_value=mock_service):
-                    result = get_service()
-                    assert result is mock_service
-                    MockCreds.assert_called_once()
+        with patch("gcalendar.build", return_value=mock_service):
+            result = await get_service("testuser")
+            assert result is mock_service
 
 
 class TestSaveToken:
-    def test_save_token_writes_file(self, google_env_setup):
-        creds_data = {
-            "token": "test-token",
-            "refresh_token": "refresh",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "client_id": "test-id",
-            "client_secret": "test-secret",
-            "scopes": ["read"],
-        }
+    @pytest.mark.asyncio
+    async def test_save_token_saves_to_db(self, storage_token_mock):
         mock_creds = MagicMock()
-        for k, v in creds_data.items():
-            setattr(mock_creds, k, v)
+        mock_creds.token = "test-token"
+        mock_creds.refresh_token = "refresh"
+        mock_creds.token_uri = "https://oauth2.googleapis.com/token"
+        mock_creds.client_id = "test-id"
+        mock_creds.client_secret = "test-secret"
+        mock_creds.scopes = ["read"]
+        mock_creds.expiry = None
 
-        _save_token(mock_creds)
-        data = json.loads(google_env_setup.read_text())
-        assert data["token"] == "test-token"
-
-    def test_save_token_sets_permissions_0600(self, google_env_setup):
-        creds_data = {
-            "token": "test-token",
-            "refresh_token": "refresh",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "client_id": "test-id",
-            "client_secret": "test-secret",
-            "scopes": ["read"],
-        }
-        mock_creds = MagicMock()
-        for k, v in creds_data.items():
-            setattr(mock_creds, k, v)
-
-        _save_token(mock_creds)
-        mode = google_env_setup.stat().st_mode & 0o777
-        assert mode == 0o600
+        await _save_token("testuser", mock_creds)
+        token_data = await storage.get_calendar_token("testuser")
+        assert token_data["token"] == "test-token"
 
 
 class TestFetchEvents:
@@ -162,7 +140,8 @@ class TestFetchEvents:
 
 
 class TestAuthFlow:
-    def test_auth_flow_returns_service(self, google_env_setup):
+    @pytest.mark.asyncio
+    async def test_auth_flow_returns_service(self, storage_token_mock):
         mock_service = MagicMock()
         mock_flow = MagicMock()
         mock_flow.credentials.token = "token"
@@ -171,13 +150,15 @@ class TestAuthFlow:
         mock_flow.credentials.client_id = "test-id"
         mock_flow.credentials.client_secret = "test-secret"
         mock_flow.credentials.scopes = ["read"]
+        mock_flow.credentials.expiry = None
 
         with patch("gcalendar._build_flow", return_value=mock_flow):
             with patch("gcalendar.build", return_value=mock_service):
-                result = auth_flow("mock_auth_response")
+                result = await auth_flow("testuser", "mock_auth_response")
                 assert result is mock_service
 
-    def test_auth_flow_saves_token(self, google_env_setup):
+    @pytest.mark.asyncio
+    async def test_auth_flow_saves_token(self, storage_token_mock):
         mock_service = MagicMock()
         mock_flow = MagicMock()
         mock_flow.credentials.token = "token"
@@ -186,43 +167,44 @@ class TestAuthFlow:
         mock_flow.credentials.client_id = "test-id"
         mock_flow.credentials.client_secret = "test-secret"
         mock_flow.credentials.scopes = ["read"]
+        mock_flow.credentials.expiry = None
 
         with patch("gcalendar._build_flow", return_value=mock_flow):
             with patch("gcalendar.build", return_value=mock_service):
-                auth_flow("mock_auth_response")
+                await auth_flow("testuser", "mock_auth_response")
 
-        saved = json.loads(google_env_setup.read_text())
-        assert saved["token"] == "token"
+        token_data = await storage.get_calendar_token("testuser")
+        assert token_data["token"] == "token"
 
 
 class TestLoadCredentials:
-    def test_load_credentials_returns_none_when_no_file(self, google_env_setup):
-        google_env_setup.unlink()
-        creds = _load_credentials()
+    @pytest.mark.asyncio
+    async def test_load_credentials_returns_none_when_no_token(self, storage_token_mock):
+        creds = await _load_credentials("nonexistent")
         assert creds is None
 
-    def test_load_credentials_returns_creds_when_file_exists(self, token_file):
-        with patch("gcalendar.TOKEN_PATH", token_file):
-            with patch("gcalendar.Credentials") as MockCreds:
-                mock_creds = MagicMock()
-                mock_creds.valid = True
-                MockCreds.return_value = mock_creds
-                creds = _load_credentials()
-                assert creds is mock_creds
+    @pytest.mark.asyncio
+    async def test_load_credentials_returns_creds_when_token_exists(self, storage_token_mock):
+        with patch("gcalendar.Credentials") as MockCreds:
+            mock_creds = MagicMock()
+            mock_creds.valid = True
+            MockCreds.return_value = mock_creds
+            creds = await _load_credentials("testuser")
+            assert creds is mock_creds
 
-    def test_load_credentials_refreshes_invalid_token(self, token_file):
-        with patch("gcalendar.TOKEN_PATH", token_file):
-            with patch("gcalendar.Credentials") as MockCreds:
-                mock_creds = MagicMock()
-                mock_creds.valid = False
-                mock_creds.refresh_token = "refresh"
-                MockCreds.return_value = mock_creds
-                with patch("gcalendar.Request"):
-                    with patch("gcalendar._save_token") as mock_save:
-                        creds = _load_credentials()
-                        assert creds is mock_creds
-                        mock_creds.refresh.assert_called_once()
-                        mock_save.assert_called_once()
+    @pytest.mark.asyncio
+    async def test_load_credentials_refreshes_invalid_token(self, storage_token_mock):
+        with patch("gcalendar.Credentials") as MockCreds:
+            mock_creds = MagicMock()
+            mock_creds.valid = False
+            mock_creds.refresh_token = "refresh"
+            MockCreds.return_value = mock_creds
+            with patch("gcalendar.Request"):
+                with patch("gcalendar._save_token", new_callable=AsyncMock) as mock_save:
+                    creds = await _load_credentials("testuser")
+                    assert creds is mock_creds
+                    mock_creds.refresh.assert_called_once()
+                    mock_save.assert_called_once()
 
 
 class TestEventsUseUTC:

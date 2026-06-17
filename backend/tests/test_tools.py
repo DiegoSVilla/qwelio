@@ -52,7 +52,7 @@ class TestToolRegistry:
 
     def test_execute_timeout(self):
         async def slow_handler():
-            await asyncio.sleep(20)
+            await asyncio.sleep(35)
             return 1
         import asyncio
         ToolRegistry.register("slow", "Slow tool", {"type": "object", "properties": {}}, slow_handler)

@@ -62,16 +62,32 @@ def mock_credentials():
 
 @pytest.fixture
 def google_env_setup(tmp_path):
-    """Set up Google OAuth env vars and TOKEN_PATH for tests that need real flow behavior."""
-    token_path = tmp_path / ".calendar_token.json"
-    token_path.touch()
+    """Set up Google OAuth env vars for tests that need real flow behavior."""
     with patch.dict(os.environ, {
         "GOOGLE_CLIENT_ID": "test-client-id",
         "GOOGLE_CLIENT_SECRET": "test-client-secret",
         "GOOGLE_REDIRECT_URI": "http://localhost:8000/api/calendar/callback",
     }):
-        with patch("gcalendar.TOKEN_PATH", token_path):
-            yield token_path
+        yield
+
+
+@pytest.fixture
+async def storage_token_mock():
+    """Set up Google OAuth env vars and seed a test token in the DB for user 'testuser'."""
+    with patch.dict(os.environ, {
+        "GOOGLE_CLIENT_ID": "test-client-id",
+        "GOOGLE_CLIENT_SECRET": "test-client-secret",
+        "GOOGLE_REDIRECT_URI": "http://localhost:8000/api/calendar/callback",
+    }):
+        await storage.save_calendar_token("testuser", {
+            "token": "test-token",
+            "refresh_token": "test-refresh",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": "test-id",
+            "client_secret": "test-secret",
+            "scopes": ["https://www.googleapis.com/auth/calendar.events"],
+        })
+        yield
 
 
 @pytest.fixture

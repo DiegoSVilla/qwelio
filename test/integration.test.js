@@ -169,23 +169,12 @@ async function run() {
 
     // === Test 5: Calendar returns auth_required (no Google Calendar connected) ===
     console.log("\n  Calendar (no Google auth):");
-    // Clean up any stale token file so get_service() raises NotAuthenticated
-    const fs = require("fs");
-    const tokenPath = path.join(__dirname, "..", "backend", ".calendar_token.json");
-    const hadToken = fs.existsSync(tokenPath);
-    if (hadToken) fs.unlinkSync(tokenPath);
-    try {
-      const todayRes = await client.get(`http://localhost:${FRONTEND_PORT}/api/calendar/today`);
-      assert(todayRes.status === 200, "/api/calendar/today returns 200");
-      const todayData = todayRes.json();
-      assert(todayData.auth_required === true, "Calendar returns auth_required when not connected");
-      assert(typeof todayData.auth_url === "string", "Calendar returns auth_url");
-    } finally {
-      // Restore token if it existed
-      if (!hadToken) {
-        try { fs.unlinkSync(tokenPath); } catch (_) { /* ignore */ }
-      }
-    }
+    // Tokens are stored per-user in DB; fresh test DB has no tokens
+    const todayRes = await client.get(`http://localhost:${FRONTEND_PORT}/api/calendar/today`);
+    assert(todayRes.status === 200, "/api/calendar/today returns 200");
+    const todayData = todayRes.json();
+    assert(todayData.auth_required === true, "Calendar returns auth_required when not connected");
+    assert(typeof todayData.auth_url === "string", "Calendar returns auth_url");
 
     // === Test 6: Frontend JS uses relative paths ===
     console.log("\n  Frontend code quality:");

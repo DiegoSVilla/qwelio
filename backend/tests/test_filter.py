@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
 from main import _do_filter
@@ -28,38 +28,37 @@ async def auth_client(app_no_calendar):
 # --- _do_filter ---
 
 class TestDoFilter:
-    @patch("main.get_service")
-    def test_filter_by_keyword(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_by_keyword(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {
             "items": [
                 {"summary": "Meeting with Ana", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
                 {"summary": "Lunch", "start": {"dateTime": "2025-07-01T12:00:00Z"}, "end": {"dateTime": "2025-07-01T13:00:00Z"}},
             ]
         }
-        result = _do_filter(keyword="Ana")
-        assert len(result["events"]) == 1
-        assert result["events"][0]["summary"] == "Meeting with Ana"
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(keyword="Ana")
+            assert len(result["events"]) == 1
+            assert result["events"][0]["summary"] == "Meeting with Ana"
 
-    @patch("main.get_service")
-    def test_filter_by_location(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_by_location(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {
             "items": [
                 {"summary": "Standup", "location": "Room A", "start": {"dateTime": "2025-07-01T09:00:00Z"}, "end": {"dateTime": "2025-07-01T09:30:00Z"}},
                 {"summary": "Review", "location": "Room B", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
             ]
         }
-        result = _do_filter(location="Room A")
-        assert len(result["events"]) == 1
-        assert result["events"][0]["summary"] == "Standup"
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(location="Room A")
+            assert len(result["events"]) == 1
+            assert result["events"][0]["summary"] == "Standup"
 
-    @patch("main.get_service")
-    def test_filter_combined_keyword_and_location(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_combined_keyword_and_location(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {
             "items": [
                 {"summary": "Meeting with Ana", "location": "Room A", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
@@ -67,117 +66,122 @@ class TestDoFilter:
                 {"summary": "Lunch", "location": "Room A", "start": {"dateTime": "2025-07-01T12:00:00Z"}, "end": {"dateTime": "2025-07-01T13:00:00Z"}},
             ]
         }
-        result = _do_filter(keyword="Ana", location="Room A")
-        assert len(result["events"]) == 1
-        assert result["events"][0]["summary"] == "Meeting with Ana"
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(keyword="Ana", location="Room A")
+            assert len(result["events"]) == 1
+            assert result["events"][0]["summary"] == "Meeting with Ana"
 
-    @patch("main.get_service")
-    def test_filter_by_days(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_by_days(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {"items": []}
-        result = _do_filter(days=14)
-        assert result == {"events": []}
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(days=14)
+            assert result == {"events": []}
 
-    @patch("main.get_service")
-    def test_filter_no_results(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_no_results(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {
             "items": [
                 {"summary": "Meeting", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
             ]
         }
-        result = _do_filter(keyword="nonexistent")
-        assert result == {"events": []}
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(keyword="nonexistent")
+            assert result == {"events": []}
 
-    @patch("main.get_service")
-    def test_filter_by_time_min_time_max(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_by_time_min_time_max(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {
             "items": [
                 {"id": "evt1", "summary": "Meeting", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
             ]
         }
-        result = _do_filter(time_min="2025-07-01T00:00:00Z", time_max="2025-07-07T00:00:00Z")
-        assert len(result["events"]) == 1
-        assert result["events"][0]["id"] == "evt1"
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(time_min="2025-07-01T00:00:00Z", time_max="2025-07-07T00:00:00Z")
+            assert len(result["events"]) == 1
+            assert result["events"][0]["id"] == "evt1"
 
-    @patch("main.get_service")
-    def test_filter_time_min_after_time_max_raises(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_time_min_after_time_max_raises(self):
         with pytest.raises(ValueError, match="time_min must be before time_max"):
-            _do_filter(time_min="2025-07-07T00:00:00Z", time_max="2025-07-01T00:00:00Z")
+            await _do_filter(time_min="2025-07-07T00:00:00Z", time_max="2025-07-01T00:00:00Z")
 
-    def test_filter_time_min_after_time_max_mixed_tz(self):
+    @pytest.mark.asyncio
+    async def test_filter_time_min_after_time_max_mixed_tz(self):
         with pytest.raises(ValueError, match="time_min must be before time_max"):
-            _do_filter(time_min="2025-07-01T10:00:00+05:00", time_max="2025-07-01T04:00:00+00:00")
+            await _do_filter(time_min="2025-07-01T10:00:00+05:00", time_max="2025-07-01T04:00:00+00:00")
 
-    def test_filter_time_min_equal_time_max_raises(self):
+    @pytest.mark.asyncio
+    async def test_filter_time_min_equal_time_max_raises(self):
         with pytest.raises(ValueError, match="time_min must be before time_max"):
-            _do_filter(time_min="2025-07-01T00:00:00Z", time_max="2025-07-01T00:00:00Z")
+            await _do_filter(time_min="2025-07-01T00:00:00Z", time_max="2025-07-01T00:00:00Z")
 
-    @patch("main.get_service")
-    def test_filter_event_has_id(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_event_has_id(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {
             "items": [
                 {"id": "abc123", "summary": "Test", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
             ]
         }
-        result = _do_filter(keyword="Test")
-        assert result["events"][0]["id"] == "abc123"
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(keyword="Test")
+            assert result["events"][0]["id"] == "abc123"
 
-    @patch("main.get_service")
-    def test_filter_keyword_in_description(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_keyword_in_description(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {
             "items": [
                 {"summary": "Review", "description": "Discuss Ana's PR", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
             ]
         }
-        result = _do_filter(keyword="Ana")
-        assert len(result["events"]) == 1
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(keyword="Ana")
+            assert len(result["events"]) == 1
 
-    def test_filter_invalid_days(self):
+    @pytest.mark.asyncio
+    async def test_filter_invalid_days(self):
         with pytest.raises(ValueError, match="days must be between 1 and 365"):
-            _do_filter(days=500)
+            await _do_filter(days=500)
 
-    def test_filter_invalid_days_zero(self):
+    @pytest.mark.asyncio
+    async def test_filter_invalid_days_zero(self):
         with pytest.raises(ValueError, match="days must be between 1 and 365"):
-            _do_filter(days=0)
+            await _do_filter(days=0)
 
-    @patch("main.get_service")
-    def test_filter_not_authenticated(self, mock_get_service):
-        mock_get_service.side_effect = NotAuthenticated("http://auth.url")
-        result = _do_filter(keyword="test")
-        assert "error" in result
+    @pytest.mark.asyncio
+    async def test_filter_not_authenticated(self):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
+            result = await _do_filter(keyword="test")
+            assert "error" in result
 
-    @patch("main.get_service")
-    def test_filter_case_insensitive_keyword(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_case_insensitive_keyword(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {
             "items": [
                 {"summary": "Meeting with ANA", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
             ]
         }
-        result = _do_filter(keyword="ana")
-        assert len(result) == 1
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(keyword="ana")
+            assert len(result) == 1
 
-    @patch("main.get_service")
-    def test_filter_case_insensitive_location(self, mock_get_service):
+    @pytest.mark.asyncio
+    async def test_filter_case_insensitive_location(self):
         mock_service = MagicMock()
-        mock_get_service.return_value = mock_service
         mock_service.events().list().execute.return_value = {
             "items": [
                 {"summary": "Meeting", "location": "ROOM A", "start": {"dateTime": "2025-07-01T10:00:00Z"}, "end": {"dateTime": "2025-07-01T11:00:00Z"}},
             ]
         }
-        result = _do_filter(location="room a")
-        assert len(result) == 1
+        with patch("main.get_service", new_callable=AsyncMock, return_value=mock_service):
+            result = await _do_filter(location="room a")
+            assert len(result) == 1
 
 
 # --- POST /api/calendar/filter ---
@@ -190,7 +194,7 @@ class TestFilterEndpoint:
 
     @pytest.mark.asyncio
     async def test_filter_not_calendar_auth(self, auth_client):
-        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+        with patch("main.get_service", new_callable=AsyncMock, side_effect=NotAuthenticated("http://auth.url")):
             resp = await auth_client.post("/api/calendar/filter", json={})
             assert resp.status_code == 200
             data = resp.json()
@@ -198,7 +202,7 @@ class TestFilterEndpoint:
 
     @pytest.mark.asyncio
     async def test_filter_with_keyword(self, auth_client):
-        with patch("main.get_service") as mock_get_service:
+        with patch("main.get_service", new_callable=AsyncMock) as mock_get_service:
             mock_service = MagicMock()
             mock_get_service.return_value = mock_service
             mock_service.events().list().execute.return_value = {
@@ -214,7 +218,7 @@ class TestFilterEndpoint:
 
     @pytest.mark.asyncio
     async def test_filter_with_days(self, auth_client):
-        with patch("main.get_service") as mock_get_service:
+        with patch("main.get_service", new_callable=AsyncMock) as mock_get_service:
             mock_service = MagicMock()
             mock_get_service.return_value = mock_service
             mock_service.events().list().execute.return_value = {"items": []}
@@ -228,7 +232,7 @@ class TestFilterEndpoint:
 
     @pytest.mark.asyncio
     async def test_filter_default_range(self, auth_client):
-        with patch("main.get_service") as mock_get_service:
+        with patch("main.get_service", new_callable=AsyncMock) as mock_get_service:
             mock_service = MagicMock()
             mock_get_service.return_value = mock_service
             mock_service.events().list().execute.return_value = {"items": []}

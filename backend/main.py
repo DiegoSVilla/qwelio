@@ -16,16 +16,17 @@ from typing import Literal
 from datetime import datetime, date, timezone, timedelta
 
 _current_timezone: contextvars.ContextVar[str] = contextvars.ContextVar("current_timezone", default="UTC")
+_current_user_id: contextvars.ContextVar[str] = contextvars.ContextVar("current_user_id", default="")
 
 from dotenv import load_dotenv
 
 from llm import chat_with_tools, LLMError
-from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, _fetch_events, NotAuthenticated, get_month_events, disconnect_calendar, TOKEN_PATH
+from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, _fetch_events, NotAuthenticated, get_month_events, disconnect_calendar
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 from tools import ToolRegistry
 from storage import init_db, seed_default_users, save_turns, get_history, clear_history, cleanup_old_history, get_summaries, get_user_timezone, update_user_timezone
-from storage import DB_PATH
-from prompt import build_system_prompt, DEFAULT_TIMEZONE
+from storage import DB_PATH, migrate_global_token_file
+from prompt import build_system_prompt
 from settings import settings
 
 load_dotenv()
@@ -37,6 +38,7 @@ HISTORY_RETENTION_DAYS = int(os.getenv("HISTORY_RETENTION_DAYS", "30"))
 async def lifespan(app: FastAPI):
     await init_db()
     await seed_default_users()
+    await migrate_global_token_file()
     await cleanup_old_history(HISTORY_RETENTION_DAYS)
     yield
     try:
@@ -185,46 +187,50 @@ class EventFilterRequest(BaseModel):
         return self
 
 
-def _do_create(summary, start, end, location=None, description=None):
+async def _do_create(summary, start, end, location=None, description=None):
     req = EventCreateRequest(summary=summary, start=start, end=end, location=location, description=description)
+    user_id = _current_user_id.get()
     try:
-        service = get_service()
+        service = await get_service(user_id)
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
     return create_event(service, req.summary, req.start, req.end, req.location, req.description, user_tz=_current_timezone.get())
 
 
-def _do_edit(event_id, summary=None, start=None, end=None, location=None, description=None):
+async def _do_edit(event_id, summary=None, start=None, end=None, location=None, description=None):
     if not event_id:
         raise ValueError("event_id is required")
     req = EventUpdateRequest(summary=summary, start=start, end=end, location=location, description=description)
+    user_id = _current_user_id.get()
     try:
-        service = get_service()
+        service = await get_service(user_id)
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
     return edit_event(service, event_id, req.summary, req.start, req.end, req.location, req.description, user_tz=_current_timezone.get())
 
 
-def _do_delete(event_id):
+async def _do_delete(event_id):
     if not event_id:
         raise ValueError("event_id is required")
+    user_id = _current_user_id.get()
     try:
-        service = get_service()
+        service = await get_service(user_id)
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
     delete_event(service, event_id)
     return {"deleted": event_id}
 
 
-def _do_list(time_min=None, time_max=None, days=7):
+async def _do_list(time_min=None, time_max=None, days=7):
     if days is not None and (days < 1 or days > 365):
         raise ValueError("days must be between 1 and 365")
     if time_min:
         date.fromisoformat(time_min) if "T" not in time_min else datetime.fromisoformat(time_min.replace("Z", "+00:00"))
     if time_max:
         date.fromisoformat(time_max) if "T" not in time_max else datetime.fromisoformat(time_max.replace("Z", "+00:00"))
+    user_id = _current_user_id.get()
     try:
-        service = get_service()
+        service = await get_service(user_id)
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
     if time_min and time_max:
@@ -232,15 +238,16 @@ def _do_list(time_min=None, time_max=None, days=7):
     return list_events(service, days=days)
 
 
-def _do_today():
+async def _do_today():
+    user_id = _current_user_id.get()
     try:
-        service = get_service()
+        service = await get_service(user_id)
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
     return get_today_events(service)
 
 
-def _do_filter(time_min=None, time_max=None, days=None, keyword=None, location=None):
+async def _do_filter(time_min=None, time_max=None, days=None, keyword=None, location=None):
     if days is not None and (days < 1 or days > 365):
         raise ValueError("days must be between 1 and 365")
     if time_min:
@@ -252,8 +259,9 @@ def _do_filter(time_min=None, time_max=None, days=None, keyword=None, location=N
         max_dt = datetime.fromisoformat(time_max.replace("Z", "+00:00")) if "T" in time_max else datetime.fromisoformat(time_max + "T00:00:00+00:00")
         if min_dt >= max_dt:
             raise ValueError("time_min must be before time_max")
+    user_id = _current_user_id.get()
     try:
-        service = get_service()
+        service = await get_service(user_id)
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
 
@@ -386,7 +394,7 @@ def _register_tools():
     )
 
 
-def _do_get_time():
+async def _do_get_time():
     from prompt import _parse_tz_offset
     tz = _current_timezone.get()
     offset_hours = _parse_tz_offset(tz)
@@ -448,13 +456,16 @@ async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
         clean_history = [{k: v for k, v in h.items() if k != "turn_order"} for h in history]
         print(f"[QW-B003] api_chat: history loaded, turns={len(clean_history)}")
 
+        # Set user context for tool handlers
+        _current_user_id.set(user.id)
+
         # Fetch calendar context (async-safe, graceful degradation)
         today_ev = []
         week_ev = []
         calendar_available = False
         try:
             print("[QW-B004] api_chat: fetching calendar service")
-            service = get_service()
+            service = await get_service(user.id)
             print("[QW-B005] api_chat: fetching today events")
             today_ev = await asyncio.to_thread(get_today_events, service)
             print(f"[QW-B006] api_chat: today events={len(today_ev)}")
@@ -560,16 +571,16 @@ async def trigger_summarize(user: User = Depends(get_current_user)):
 async def calendar_auth(request: Request, user: User = Depends(get_current_user)):
     print(f"[QW-B036] calendar_auth: start, user={user.id}")
     try:
-        get_service()
+        await get_service(user.id)
         print("[QW-B037] calendar_auth: already authenticated")
         return {"error": "Already authenticated"}
-    except NotAuthenticated as e:
+    except NotAuthenticated:
         print("[QW-B038] calendar_auth: not authenticated, generating OAuth state")
         state = secrets.token_urlsafe(32)
         request.session["oauth_state"] = state
         print(f"[QW-B039] calendar_auth: oauth_state stored={state[:8]}...")
         try:
-            get_service(state=state)
+            await get_service(user.id, state=state)
         except NotAuthenticated as e2:
             request.session["oauth_code_verifier"] = e2.code_verifier
             print(f"[QW-B040] calendar_auth: code_verifier stored={e2.code_verifier is not None}")
@@ -590,7 +601,7 @@ async def calendar_callback(request: Request, state: str = Query(...), user: Use
     callback_url = os.getenv("GOOGLE_REDIRECT_URI") + "?" + str(request.url.query)
     print(f"[QW-B045] calendar_callback: callback_url={callback_url}, code_verifier={code_verifier is not None}")
     try:
-        auth_flow(callback_url, code_verifier)
+        await auth_flow(user.id, callback_url, code_verifier)
         print("[QW-B046] calendar_callback: auth_flow succeeded")
         return HTMLResponse(
             "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='2;url=/'>"
@@ -611,7 +622,7 @@ async def calendar_callback(request: Request, state: str = Query(...), user: Use
 async def calendar_today(user: User = Depends(get_current_user)):
     print(f"[QW-B030] calendar_today: start, user={user.id}")
     try:
-        service = get_service()
+        service = await get_service(user.id)
         events = get_today_events(service)
         print(f"[QW-B031] calendar_today: success, events={len(events)}")
         return {"events": events}
@@ -624,7 +635,7 @@ async def calendar_today(user: User = Depends(get_current_user)):
 async def calendar_week(user: User = Depends(get_current_user)):
     print(f"[QW-B033] calendar_week: start, user={user.id}")
     try:
-        service = get_service()
+        service = await get_service(user.id)
         events = list_events(service, days=7)
         print(f"[QW-B034] calendar_week: success, events={len(events)}")
         return {"events": events}
@@ -636,7 +647,7 @@ async def calendar_week(user: User = Depends(get_current_user)):
 @app.post("/api/calendar/events")
 async def create_calendar_event(resp: Response, req: EventCreateRequest, user: User = Depends(get_current_user)):
     try:
-        service = get_service()
+        service = await get_service(user.id)
         try:
             user_tz = await get_user_timezone(user.id)
             event = create_event(
@@ -659,7 +670,7 @@ async def create_calendar_event(resp: Response, req: EventCreateRequest, user: U
 @app.patch("/api/calendar/events/{event_id}")
 async def edit_calendar_event(event_id: str, req: EventUpdateRequest, user: User = Depends(get_current_user)):
     try:
-        service = get_service()
+        service = await get_service(user.id)
         try:
             user_tz = await get_user_timezone(user.id)
             updated = edit_event(
@@ -682,7 +693,7 @@ async def edit_calendar_event(event_id: str, req: EventUpdateRequest, user: User
 @app.delete("/api/calendar/events/{event_id}")
 async def delete_calendar_event(event_id: str, user: User = Depends(get_current_user)):
     try:
-        service = get_service()
+        service = await get_service(user.id)
         try:
             delete_event(service, event_id)
             return {"deleted": event_id}
@@ -695,7 +706,7 @@ async def delete_calendar_event(event_id: str, user: User = Depends(get_current_
 @app.post("/api/calendar/filter")
 async def filter_events(req: EventFilterRequest, user: User = Depends(get_current_user)):
     try:
-        service = get_service()
+        service = await get_service(user.id)
     except NotAuthenticated as e:
         return {"auth_required": True, "auth_url": e.auth_url}
 
@@ -707,7 +718,7 @@ async def filter_events(req: EventFilterRequest, user: User = Depends(get_curren
 async def calendar_status(user: User = Depends(get_current_user)):
     """Check if calendar is connected."""
     try:
-        get_service()
+        await get_service(user.id)
         return {"connected": True}
     except NotAuthenticated as e:
         return {"connected": False, "auth_url": e.auth_url}
@@ -718,7 +729,7 @@ async def calendar_month(year: int = Query(...), month: int = Query(...), user: 
     """Get events for a specific month."""
     print(f"[QW-B050] calendar_month: year={year}, month={month}, user={user.id}")
     try:
-        service = get_service()
+        service = await get_service(user.id)
         events = get_month_events(service, year, month)
         print(f"[QW-B051] calendar_month: success, events={len(events)}")
         return {"events": events}
@@ -730,7 +741,7 @@ async def calendar_month(year: int = Query(...), month: int = Query(...), user: 
 @app.delete("/api/calendar/disconnect")
 async def calendar_disconnect(request: Request, user: User = Depends(get_current_user)):
     """Disconnect Google Calendar by revoking token."""
-    result = disconnect_calendar()
+    result = await disconnect_calendar(user.id)
     request.session.pop("oauth_state", None)
     request.session.pop("oauth_code_verifier", None)
     return result

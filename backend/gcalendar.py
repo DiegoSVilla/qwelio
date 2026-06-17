@@ -5,12 +5,10 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from datetime import datetime, timedelta, timezone
 import os
-import json
-import pathlib
+import storage
 from prompt import _parse_tz_offset
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
-TOKEN_PATH = pathlib.Path(__file__).parent / ".calendar_token.json"
 
 
 class NotAuthenticated(Exception):
@@ -20,37 +18,41 @@ class NotAuthenticated(Exception):
         super().__init__(f"Not authenticated. Visit: {auth_url}")
 
 
-def _save_token(credentials):
-    print("[QW-G001] _save_token: saving calendar token")
-    TOKEN_PATH.write_text(json.dumps({
+async def _save_token(user_id: str, credentials):
+    """Save user's OAuth token to the database."""
+    print("[QW-G001] _save_token: saving calendar token for user")
+    expiry = getattr(credentials, "expiry", None)
+    token_data = {
         "token": credentials.token,
         "refresh_token": credentials.refresh_token,
         "token_uri": credentials.token_uri,
         "client_id": credentials.client_id,
         "client_secret": credentials.client_secret,
         "scopes": credentials.scopes,
-    }))
-    TOKEN_PATH.chmod(0o600)
+        "expiry": expiry.isoformat() if expiry else None,
+    }
+    await storage.save_calendar_token(user_id, token_data)
     print("[QW-G002] _save_token: saved successfully")
 
 
-def _load_credentials():
-    print("[QW-G003] _load_credentials: checking token file")
-    if TOKEN_PATH.exists():
-        data = json.loads(TOKEN_PATH.read_text())
-        creds = Credentials(**data)
-        print(f"[QW-G004] _load_credentials: token valid={creds.valid}")
-        if not creds.valid:
-            if creds.refresh_token:
-                print("[QW-G005] _load_credentials: refreshing expired token")
-                creds.refresh(Request())
-                _save_token(creds)
-                print("[QW-G006] _load_credentials: token refreshed successfully")
-            else:
-                print("[QW-G007] _load_credentials: no refresh token available")
-        return creds
-    print("[QW-G008] _load_credentials: no token file found")
-    return None
+async def _load_credentials(user_id: str):
+    """Load user's OAuth credentials from the database."""
+    print("[QW-G003] _load_credentials: checking token for user")
+    token_data = await storage.get_calendar_token(user_id)
+    if not token_data:
+        print("[QW-G008] _load_credentials: no token found for user")
+        return None
+    creds = Credentials(**token_data)
+    print(f"[QW-G004] _load_credentials: token valid={creds.valid}")
+    if not creds.valid:
+        if creds.refresh_token:
+            print("[QW-G005] _load_credentials: refreshing expired token")
+            creds.refresh(Request())
+            await _save_token(user_id, creds)
+            print("[QW-G006] _load_credentials: token refreshed successfully")
+        else:
+            print("[QW-G007] _load_credentials: no refresh token available")
+    return creds
 
 
 def _check_env():
@@ -88,8 +90,13 @@ def _format_events(events):
     return formatted
 
 
-def get_service(state=None):
-    creds = _load_credentials()
+async def get_service(user_id: str, state=None):
+    """Get a Google Calendar service for the given user.
+
+    If the user has valid credentials, returns the service.
+    If not, raises NotAuthenticated with the OAuth URL.
+    """
+    creds = await _load_credentials(user_id)
     if creds:
         print("[QW-G010] get_service: returning calendar service with valid credentials")
         return build("calendar", "v3", credentials=creds)
@@ -111,7 +118,8 @@ def get_service(state=None):
     raise NotAuthenticated(auth_url, code_verifier)
 
 
-def auth_flow(callback_url, code_verifier=None):
+async def auth_flow(user_id: str, callback_url, code_verifier=None):
+    """Complete OAuth flow and save per-user token."""
     print("[QW-G020] auth_flow: start")
     flow = _build_flow()
     flow.redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
@@ -121,7 +129,7 @@ def auth_flow(callback_url, code_verifier=None):
     print("[QW-G022] auth_flow: fetching token from Google")
     flow.fetch_token(authorization_response=callback_url)
     print("[QW-G023] auth_flow: token fetched, saving credentials")
-    _save_token(flow.credentials)
+    await _save_token(user_id, flow.credentials)
     print("[QW-G024] auth_flow: building calendar service")
     return build("calendar", "v3", credentials=flow.credentials)
 
@@ -353,27 +361,24 @@ def get_month_events(service, year: int, month: int):
     return _fetch_events(service, start.isoformat(), end.isoformat())
 
 
-def disconnect_calendar():
-    """Revoke Google OAuth tokens and delete token file."""
+async def disconnect_calendar(user_id: str):
+    """Revoke Google OAuth tokens and delete user's token entry."""
     print("[QW-G100] disconnect_calendar: start")
-    if not TOKEN_PATH.exists():
-        print("[QW-G101] disconnect_calendar: no token file found")
+    token_data = await storage.get_calendar_token(user_id)
+    if not token_data:
+        print("[QW-G101] disconnect_calendar: no token found for user")
         return {"error": "Calendar not connected"}
     try:
-        data = json.loads(TOKEN_PATH.read_text())
-        creds = Credentials(**data)
-        from google.auth.transport.requests import Request
+        creds = Credentials(**token_data)
         req = Request()
         revoke_url = "https://oauth2.googleapis.com/revoke"
-        # Revoke access token
         resp = req.post(revoke_url, body=f"token={creds.token}")
         print(f"[QW-G102] disconnect_calendar: access token revoked, status={resp.status}")
-        # Also revoke refresh token if present
         if creds.refresh_token:
             resp = req.post(revoke_url, body=f"token={creds.refresh_token}")
             print(f"[QW-G103] disconnect_calendar: refresh token revoked, status={resp.status}")
     except Exception as e:
         print(f"[QW-G104] disconnect_calendar: revoke failed: {e}")
-    TOKEN_PATH.unlink(missing_ok=True)
-    print("[QW-G105] disconnect_calendar: token file deleted")
+    await storage.delete_calendar_token(user_id)
+    print("[QW-G105] disconnect_calendar: token deleted for user")
     return {"disconnected": True}
