@@ -61,6 +61,18 @@ class TestToolRegistry:
             loop.run_until_complete(ToolRegistry.execute("slow", {}))
         loop.close()
 
+    def test_execute_non_serializable_result(self):
+        """Tool returning datetime or other non-JSON-serializable types must fail loudly."""
+        import asyncio
+        from datetime import datetime, timezone
+        def bad_handler():
+            return {"time": datetime.now(timezone.utc)}
+        ToolRegistry.register("bad", "Bad tool", {"type": "object", "properties": {}}, bad_handler)
+        loop = asyncio.new_event_loop()
+        with pytest.raises(RuntimeError, match="non-JSON-serializable"):
+            loop.run_until_complete(ToolRegistry.execute("bad", {}))
+        loop.close()
+
     def test_reset_clears_registry(self):
         ToolRegistry.register("a", "a", {"type": "object", "properties": {}}, lambda: None)
         assert len(ToolRegistry._tools) == 1

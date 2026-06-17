@@ -1,0 +1,105 @@
+/* ============================================================
+   Qwelio — Layout
+   Header, container, grid split (calendar 60% / chat 40%)
+   ============================================================ */
+
+.container {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: var(--spacing-md);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-hidden {
+  display: none;
+}
+
+/* Header */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  box-shadow: var(--shadow-offset) var(--shadow-color);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+}
+
+header h1 {
+  font-size: 1rem;
+  color: var(--color-accent);
+  text-shadow: 0 0 8px var(--color-accent-glow);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.header-clock {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+}
+
+.header-user {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+}
+
+/* Dashboard grid: calendar 60% / chat 40% */
+.dashboard {
+  display: grid;
+  grid-template-columns: 60% 40%;
+  gap: var(--spacing-lg);
+  flex: 1;
+  min-height: 0;
+}
+
+.calendar-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  min-height: 0;
+}
+
+.chat-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Panel base */
+.panel {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  box-shadow: var(--shadow-offset) var(--shadow-color);
+  padding: var(--spacing-md);
+}
+
+.panel-title {
+  font-family: var(--font-header);
+  font-size: 0.65rem;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 2px solid var(--color-border);
+}
+
+@media (max-width: 960px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-column {
+    min-height: 50vh;
+  }
+}

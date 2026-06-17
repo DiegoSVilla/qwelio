@@ -1,15 +1,137 @@
-* {
+/* Qwelio — Styles (inlined) */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+/* ============================================================
+   Qwelio — Design Tokens & Base
+   8-bit retro arcade: grayscale + cyan accent, monospace, blocky
+   ============================================================ */
+
+:root {
+  --color-bg: #0a0a0a;
+  --color-surface: #141414;
+  --color-surface-alt: #1a1a1a;
+  --color-border: #2a2a2a;
+  --color-border-light: #3a3a3a;
+  --color-text: #e0e0e0;
+  --color-text-dim: #707070;
+  --color-text-muted: #4a4a4a;
+  --color-accent: #00e5ff;
+  --color-accent-dim: #00596b;
+  --color-accent-glow: rgba(0, 229, 255, 0.15);
+  --color-error: #ff4444;
+  --color-success: #44ff88;
+  --color-warning: #ffaa00;
+  --color-today: #00e5ff;
+  --color-selected: #00e5ff;
+  --color-current-week: #1a3a3a;
+
+  --font-mono: 'Courier New', 'Consolas', 'Liberation Mono', monospace;
+  --font-header: 'Press Start 2P', 'Courier New', monospace;
+
+  --shadow-offset: 4px 4px 0px 0px;
+  --shadow-color: #000000;
+
+  --grid-unit: 4px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+
+  --z-modal: 1000;
+  --z-overlay: 900;
+  --z-header: 100;
+}
+
+/* Reset */
+*, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #0f1117;
-  color: #e1e4e8;
-  line-height: 1.6;
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: auto;
 }
+
+body {
+  font-family: var(--font-mono);
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.12) 2px,
+    rgba(0, 0, 0, 0.12) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-light);
+  border: 2px solid var(--color-border);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-dim);
+}
+
+/* Selection */
+::selection {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* Focus */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Links */
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+/* Headings */
+h1, h2, h3, h4 {
+  font-family: var(--font-header);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================
+   Qwelio — Loading Overlay
+   Retro spinner
+   ============================================================ */
 
 .loading-overlay {
   position: fixed;
@@ -18,346 +140,832 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: #0f1117;
-  z-index: 1000;
+  background: var(--color-bg);
+  z-index: var(--z-modal);
 }
 
 .loading-overlay p {
-  margin-top: 1rem;
-  color: #8b949e;
-  font-size: 0.9rem;
+  margin-top: var(--spacing-md);
+  color: var(--color-text-dim);
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
 }
 
 .loading-spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #21262d;
-  border-top-color: #58a6ff;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  width: 32px;
+  height: 32px;
+  border: 4px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  animation: spin 0.6s steps(8) infinite;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
+/* ============================================================
+   Qwelio — Layout
+   Header, container, grid split (calendar 60% / chat 40%)
+   ============================================================ */
+
+.container {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: var(--spacing-md);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .app-hidden {
   display: none;
 }
 
-.container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
-}
-
+/* Header */
 header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #21262d;
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  box-shadow: var(--shadow-offset) var(--shadow-color);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
 }
 
 header h1 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #58a6ff;
+  font-size: 1rem;
+  color: var(--color-accent);
+  text-shadow: 0 0 8px var(--color-accent-glow);
 }
 
-.header-status {
+.header-right {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: var(--spacing-md);
 }
 
-.header-status a {
-  color: #58a6ff;
-  text-decoration: none;
+.header-clock {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
 }
 
-.header-status a:hover {
+.header-user {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+}
+
+/* Dashboard grid: calendar 60% / chat 40% */
+.dashboard {
+  display: grid;
+  grid-template-columns: 60% 40%;
+  gap: var(--spacing-lg);
+  flex: 1;
+  min-height: 0;
+}
+
+.calendar-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  min-height: 0;
+}
+
+.chat-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Panel base */
+.panel {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  box-shadow: var(--shadow-offset) var(--shadow-color);
+  padding: var(--spacing-md);
+}
+
+.panel-title {
+  font-family: var(--font-header);
+  font-size: 0.65rem;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 2px solid var(--color-border);
+}
+
+@media (max-width: 960px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-column {
+    min-height: 50vh;
+  }
+}
+
+/* ============================================================
+   Qwelio — Calendar Grid
+   Monthly view with prev/next nav, today emphasis, event dots
+   ============================================================ */
+
+.calendar-grid-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.calendar-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.calendar-nav-btn {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+}
+
+.calendar-nav-btn:hover {
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.calendar-month-label {
+  font-family: var(--font-header);
+  font-size: 0.7rem;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.calendar-weekday {
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  padding: var(--spacing-xs) 0;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: var(--spacing-xs);
+  background: var(--color-surface-alt);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.1s;
+  min-height: 48px;
+  overflow: hidden;
+}
+
+.calendar-day:hover {
+  border-color: var(--color-accent);
+}
+
+.calendar-day.other-month {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.calendar-day.other-month:hover {
+  border-color: var(--color-border);
+}
+
+.calendar-day.current-week {
+  background: var(--color-current-week);
+}
+
+.calendar-day.today {
+  border-color: var(--color-today);
+  background: var(--color-accent-glow);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.calendar-day.selected {
+  border-color: var(--color-selected);
+  background: var(--color-accent-glow);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.calendar-day.selected.today {
+  background: rgba(0, 229, 255, 0.25);
+}
+
+.calendar-day-number {
+  font-size: 0.8rem;
+  color: var(--color-text);
+  font-weight: bold;
+}
+
+.calendar-day.today .calendar-day-number {
+  color: var(--color-accent);
+}
+
+.calendar-day-dots {
+  display: flex;
+  gap: 3px;
+  margin-top: auto;
+  padding-top: var(--spacing-xs);
+}
+
+.calendar-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--color-accent);
+  display: inline-block;
+}
+
+.calendar-dot.all-day {
+  background: var(--color-text-dim);
+}
+
+/* Event bars in calendar day cells */
+.calendar-day-bars {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 2px 2px 2px;
+}
+
+.calendar-event-bar {
+  height: 4px;
+  background: var(--color-accent);
+  position: relative;
+  transition: opacity 0.1s;
+}
+
+.calendar-event-bar.all-day {
+  background: var(--color-text-dim);
+}
+
+.calendar-more {
+  font-size: 0.55rem;
+  color: var(--color-text-dim);
+  text-align: center;
+  line-height: 1;
+}
+
+/* ============================================================
+   Qwelio — Day Detail Panel
+   Bottom 30% of calendar column, card-style event blocks
+   ============================================================ */
+
+.day-detail {
+  min-height: 0;
+}
+
+.day-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.day-detail-date {
+  font-family: var(--font-header);
+  font-size: 0.6rem;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+
+.day-detail-events {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-height: 0;
+}
+
+.day-event-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-sm);
+  background: var(--color-surface-alt);
+  border: 2px solid var(--color-border);
+  border-left: 4px solid var(--color-border);
+  transition: border-left-color 0.15s;
+}
+
+.day-event-card:hover {
+  border-left-color: var(--color-accent);
+}
+
+.day-event-time {
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  min-width: 60px;
+  white-space: nowrap;
+}
+
+.day-event-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.day-event-summary {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  margin-bottom: 2px;
+}
+
+.day-event-location {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.day-event-desc {
+  font-size: 0.7rem;
+  color: var(--color-text-dim);
+  margin-top: var(--spacing-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-no-events {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: var(--spacing-lg) 0;
+}
+
+/* ============================================================
+   Qwelio — Chat Panel
+   Terminal-style: > user, Q> assistant, markdown rendering
+   ============================================================ */
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: var(--spacing-md);
+  padding-right: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-height: 0;
+}
+
+.chat-message {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-surface-alt);
+  border: 2px solid var(--color-border);
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.chat-message.user {
+  border-left: 3px solid var(--color-accent);
+}
+
+.chat-message.user .msg-prefix {
+  color: var(--color-accent);
+}
+
+.chat-message.assistant {
+  border-left: 3px solid var(--color-text-dim);
+}
+
+.chat-message.assistant .msg-prefix {
+  color: var(--color-text-dim);
+}
+
+.chat-message.system {
+  border-left: 3px solid var(--color-error);
+  color: var(--color-error);
+  font-size: 0.8rem;
+}
+
+.msg-prefix {
+  font-weight: bold;
+  margin-right: var(--spacing-xs);
+  user-select: none;
+}
+
+.msg-content {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* Markdown rendering inside assistant messages */
+.msg-content p {
+  margin-bottom: var(--spacing-sm);
+}
+.msg-content p:last-child {
+  margin-bottom: 0;
+}
+.msg-content code {
+  background: var(--color-bg);
+  color: var(--color-accent);
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  border: 1px solid var(--color-border);
+}
+.msg-content pre {
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  padding: var(--spacing-sm);
+  overflow-x: auto;
+  margin-bottom: var(--spacing-sm);
+}
+.msg-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.msg-content ul, .msg-content ol {
+  padding-left: var(--spacing-lg);
+  margin-bottom: var(--spacing-sm);
+}
+.msg-content li {
+  margin-bottom: var(--spacing-xs);
+}
+.msg-content blockquote {
+  border-left: 3px solid var(--color-accent-dim);
+  padding-left: var(--spacing-sm);
+  color: var(--color-text-dim);
+  margin-bottom: var(--spacing-sm);
+}
+.msg-content strong {
+  color: var(--color-text);
+}
+.msg-content em {
+  color: var(--color-text-dim);
+}
+.msg-content a {
+  color: var(--color-accent);
   text-decoration: underline;
 }
 
-.header-status button {
-  padding: 0.4rem 0.8rem;
-  background: #21262d;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  color: #e1e4e8;
-  cursor: pointer;
+/* Chat form */
+.chat-form {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.chat-input {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+  font-family: var(--font-mono);
   font-size: 0.85rem;
 }
 
-.header-status button:hover {
-  background: #30363d;
+.chat-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
 }
 
-.login-main {
+.chat-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.chat-send-btn {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border: 2px solid var(--color-accent);
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Suggestion chips */
+.suggestion-chips {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 60vh;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
 }
 
-.login-panel {
+.suggestion-chip {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text-dim);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+}
+
+.suggestion-chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ============================================================
+   Qwelio — Settings Modal
+   Overlay + dialog with form controls
+   ============================================================ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-overlay);
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 2px solid var(--color-accent);
+  box-shadow: var(--shadow-offset) var(--shadow-color), 0 0 20px var(--color-accent-glow);
+  padding: var(--spacing-lg);
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-title {
+  font-family: var(--font-header);
+  font-size: 0.7rem;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.modal-close {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  color: var(--color-accent);
+}
+
+/* Form controls in modal */
+.settings-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.settings-group label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  margin-bottom: var(--spacing-xs);
+  text-transform: uppercase;
+}
+
+.settings-group select,
+.settings-group input[type="text"],
+.settings-group input[type="number"] {
   width: 100%;
-  max-width: 400px;
+  padding: var(--spacing-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.settings-group select:focus,
+.settings-group input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.settings-group select {
+  cursor: pointer;
+}
+
+.settings-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 2px solid var(--color-border);
+}
+
+.settings-btn {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.settings-btn.primary {
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.settings-btn.primary:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.settings-btn.danger {
+  background: transparent;
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.settings-btn.danger:hover {
+  background: var(--color-error);
+  color: var(--color-bg);
+}
+
+.settings-btn.secondary {
+  background: var(--color-surface-alt);
+  color: var(--color-text-dim);
+}
+
+.settings-btn.secondary:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-dim);
+}
+
+.settings-section-label {
+  font-family: var(--font-header);
+  font-size: 0.55rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin: var(--spacing-lg) 0 var(--spacing-sm);
+  letter-spacing: 0.1em;
+}
+
+.settings-danger-zone {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 2px solid var(--color-error);
+}
+
+.settings-danger-zone .settings-section-label {
+  color: var(--color-error);
+}
+
+/* ============================================================
+   Qwelio — Login Page
+   Terminal-style login form
+   ============================================================ */
+
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--spacing-md);
+}
+
+.login-terminal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-accent);
+  box-shadow: var(--shadow-offset) var(--shadow-color), 0 0 30px var(--color-accent-glow);
+  padding: var(--spacing-lg);
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.login-header h1 {
+  font-size: 1rem;
+  color: var(--color-accent);
+  text-shadow: 0 0 10px var(--color-accent-glow);
+  margin-bottom: var(--spacing-sm);
+}
+
+.login-header p {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--spacing-md);
 }
 
-.form-group {
+.login-field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--spacing-xs);
 }
 
-.form-group label {
-  font-size: 0.85rem;
-  color: #8b949e;
-}
-
-.form-group input {
-  padding: 0.6rem 0.75rem;
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  color: #e1e4e8;
-  font-size: 0.9rem;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #58a6ff;
-  box-shadow: 0 0 0 2px #58a6ff44;
-}
-
-.login-form button {
-  padding: 0.6rem 1.2rem;
-  background: #238636;
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  font-weight: 500;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.login-form button:hover {
-  background: #2ea043;
-}
-
-.dashboard {
-  display: grid;
-  grid-template-columns: 1fr 35%;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-.calendar-section {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.chat-panel {
-  position: sticky;
-  top: 1rem;
-  height: fit-content;
-}
-
-.chat-panel .panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 300px;
-  max-height: calc(100vh - 4rem);
-}
-
-@media (max-width: 900px) {
-  .dashboard {
-    grid-template-columns: 1fr;
-  }
-
-  .chat-panel {
-    position: static;
-  }
-
-  .chat-panel .panel {
-    max-height: 60vh;
-  }
-}
-
-.panel {
-  background: #161b22;
-  border: 1px solid #21262d;
-  border-radius: 8px;
-  padding: 1.25rem;
-}
-
-.panel h2 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
-  color: #8b949e;
+.login-field label {
+  font-size: 0.7rem;
+  color: var(--color-text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  margin-bottom: 1rem;
-  padding-right: 0.5rem;
-}
-
-.message {
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 0.5rem;
-  border-radius: 6px;
-  max-width: 80%;
-}
-
-.message.user {
-  background: #1f6feb33;
-  margin-left: auto;
-}
-
-.message.assistant {
-  background: #21262d;
-}
-
-.message.system {
-  background: #da363333;
-  color: #f85149;
-  font-size: 0.85rem;
-}
-
-.chat-form {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.chat-form input {
-  flex: 1;
-  padding: 0.6rem 0.75rem;
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  color: #e1e4e8;
+.login-field input {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+  font-family: var(--font-mono);
   font-size: 0.9rem;
 }
 
-.chat-form input:focus {
+.login-field input:focus {
   outline: none;
-  border-color: #58a6ff;
-  box-shadow: 0 0 0 2px #58a6ff44;
+  border-color: var(--color-accent);
 }
 
-.chat-form button:disabled {
-  opacity: 0.5;
+.login-submit {
+  font-family: var(--font-header);
+  font-size: 0.7rem;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border: 2px solid var(--color-accent);
+  cursor: pointer;
+  text-transform: uppercase;
+  margin-top: var(--spacing-sm);
+}
+
+.login-submit:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.login-submit:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.chat-form button {
-  padding: 0.6rem 1.2rem;
-  background: #238636;
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  font-weight: 500;
-  cursor: pointer;
+.login-error {
+  color: var(--color-error);
+  font-size: 0.75rem;
+  padding: var(--spacing-sm);
+  border: 2px solid var(--color-error);
+  background: rgba(255, 68, 68, 0.1);
+  display: none;
 }
 
-.chat-form button:hover {
-  background: #2ea043;
-}
-
-.event {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #21262d;
-}
-
-.event:last-child {
-  border-bottom: none;
-}
-
-.event-time,
-.event-date {
-  font-size: 0.8rem;
-  color: #8b949e;
-  min-width: 70px;
-}
-
-.event-summary {
-  flex: 1;
-}
-
-.event-location {
-  font-size: 0.8rem;
-  color: #8b949e;
-}
-
-.placeholder {
-  color: #484f58;
-  font-style: italic;
-  font-size: 0.9rem;
-}
-
-.error {
-  color: #f85149;
-  font-size: 0.9rem;
-}
-
-.connect-btn {
-  display: inline-block;
-  padding: 0.3rem 0.7rem;
-  background: #238636;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
-  font-weight: 500;
-  text-decoration: none;
-  font-size: 0.85rem;
-  cursor: pointer;
-  margin-left: 0.25rem;
-}
-
-.connect-btn:hover {
-  background: #2ea043;
-  text-decoration: none;
-}
-
-.suggestion-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.suggestion-chip {
-  padding: 0.4rem 0.8rem;
-  background: #21262d;
-  border: 1px solid #30363d;
-  border-radius: 16px;
-  color: #e1e4e8;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.suggestion-chip:hover {
-  background: #30363d;
-  border-color: #58a6ff;
-}

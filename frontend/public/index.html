@@ -15,42 +15,115 @@
   <div id="app-root" class="container app-hidden">
     <header>
       <h1>Qwelio</h1>
-      <div class="header-status">
-        <span id="calendar-status">Calendar: <em>not connected</em></span>
-        <button id="logout-btn">Logout</button>
+      <div class="header-right">
+        <span id="header-clock" class="header-clock"></span>
+        <span id="calendar-status" class="header-user"></span>
+        <button id="settings-btn" class="calendar-nav-btn" title="Settings">SETTINGS</button>
+        <button id="logout-btn" class="calendar-nav-btn">LOGOUT</button>
       </div>
     </header>
 
     <main class="dashboard">
-      <div class="calendar-section">
-        <section class="panel">
-          <h2>Today</h2>
-          <div id="today-events">
-            <p class="placeholder">Loading today's events...</p>
+      <div class="calendar-column">
+        <div class="panel calendar-grid-wrapper">
+          <div class="calendar-nav">
+            <button id="cal-prev-btn" class="calendar-nav-btn">&#9664; PREV</button>
+            <span id="cal-month-label" class="calendar-month-label"></span>
+            <button id="cal-next-btn" class="calendar-nav-btn">NEXT &#9654;</button>
           </div>
-        </section>
+          <div id="cal-weekdays" class="calendar-weekdays"></div>
+          <div id="cal-grid" class="calendar-grid"></div>
+        </div>
 
-        <section class="panel">
-          <h2>This Week</h2>
-          <div id="week-events">
-            <p class="placeholder">Loading week's events...</p>
+        <div class="panel day-detail">
+          <div class="day-detail-header">
+            <span id="day-detail-date" class="day-detail-date"></span>
           </div>
-        </section>
+          <div id="day-detail-events" class="day-detail-events"></div>
+        </div>
       </div>
 
-      <aside class="chat-panel">
-        <div class="panel">
-          <h2>Chat</h2>
+      <div class="chat-column">
+        <div class="panel chat-panel">
+          <div class="panel-title">Chat</div>
           <div id="chat-messages" class="chat-messages"></div>
           <form id="chat-form" class="chat-form">
-            <input type="text" id="chat-input" placeholder="Ask something..." autocomplete="off">
-            <button type="submit">Send</button>
+            <input type="text" id="chat-input" class="chat-input" placeholder="Ask something..." autocomplete="off">
+            <button type="submit" class="chat-send-btn">Send</button>
           </form>
         </div>
-      </aside>
+      </div>
     </main>
   </div>
 
+  <div id="settings-modal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <h2 class="modal-title">Settings</h2>
+
+      <div class="settings-section-label">Appearance</div>
+      <div class="settings-group">
+        <label for="settings-timezone">Timezone</label>
+        <select id="settings-timezone"></select>
+      </div>
+
+      <div class="settings-section-label">AI Inference</div>
+      <div class="settings-group">
+        <label for="settings-model">Model</label>
+        <input type="text" id="settings-model" readonly>
+      </div>
+      <div class="settings-group">
+        <label for="settings-temp">Temperature</label>
+        <input type="number" id="settings-temp" min="0" max="2" step="0.1">
+      </div>
+      <div class="settings-group">
+        <label for="settings-timeout">Timeout (s)</label>
+        <input type="number" id="settings-timeout" min="1" max="300" step="1">
+      </div>
+      <div class="settings-group">
+        <label for="settings-retries">Max Retries</label>
+        <input type="number" id="settings-retries" min="0" step="1">
+      </div>
+      <div class="settings-group">
+        <label for="settings-context">Max Context Turns</label>
+        <input type="number" id="settings-context" min="1" max="100" step="1">
+      </div>
+      <div class="settings-group">
+        <label for="settings-iterations">Max Tool Iterations</label>
+        <input type="number" id="settings-iterations" min="1" max="20" step="1">
+      </div>
+
+      <div class="settings-section-label">Calendar</div>
+      <div class="settings-group">
+        <button id="settings-disconnect" class="settings-btn danger">Disconnect Calendar</button>
+      </div>
+
+      <div class="settings-section-label">Data</div>
+      <div class="settings-group">
+        <button id="settings-clear-history" class="settings-btn danger">Clear Chat History</button>
+      </div>
+
+      <div class="settings-actions">
+        <button id="settings-save" class="settings-btn primary">Save</button>
+        <button id="settings-close" class="settings-btn secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/utc.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/pt-br.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <script src="/js/app-core.js"></script>
+  <script src="/js/app-clock.js"></script>
+  <script src="/js/app-calendar.js"></script>
+  <script src="/js/app-day-detail.js"></script>
+  <script src="/js/app-chat.js"></script>
+  <script src="/js/app-calendar-status.js"></script>
+  <script src="/js/app-settings.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

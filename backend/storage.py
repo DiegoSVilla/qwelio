@@ -43,9 +43,15 @@ async def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
+                timezone TEXT NOT NULL DEFAULT 'UTC',
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
+        # Migration: add timezone column if it doesn't exist (for existing DBs)
+        try:
+            await conn.execute("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'UTC'")
+        except Exception:
+            pass  # Column already exists
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_turn ON conversations(user_id, turn_order)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_timestamp ON conversations(timestamp)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_period ON summaries(user_id, period, period_start)")
@@ -96,6 +102,29 @@ async def create_user(username: str, password: str) -> int:
         )
         await conn.commit()
         return cursor.lastrowid or 0
+
+
+async def get_user_timezone(user_id: str) -> str:
+    """Return the user's timezone setting. Defaults to 'UTC'."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.execute(
+            "SELECT timezone FROM users WHERE username = ?",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+    if row and row[0]:
+        return row[0]
+    return "UTC"
+
+
+async def update_user_timezone(user_id: str, timezone: str):
+    """Update the user's timezone setting."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE users SET timezone = ? WHERE username = ?",
+            (timezone, user_id),
+        )
+        await conn.commit()
 
 
 async def save_turn(user_id: str, role: str, content: str | None, tool_calls: list | None, tool_call_id: str | None, turn_order: int):

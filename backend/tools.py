@@ -36,7 +36,12 @@ class ToolRegistry:
             else:
                 coro = asyncio.to_thread(handler, **arguments)
                 result = await asyncio.wait_for(coro, timeout=10.0)
-            return json.dumps(result) if isinstance(result, dict) else str(result)
+            if isinstance(result, dict):
+                try:
+                    return json.dumps(result)
+                except (TypeError, ValueError) as e:
+                    raise RuntimeError(f"Tool {name} returned non-JSON-serializable result: {e}") from e
+            return str(result)
         except asyncio.TimeoutError:
             raise RuntimeError(f"Tool {name} timed out after 10s")
 

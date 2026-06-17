@@ -467,6 +467,139 @@ class TestRateLimiter:
             assert await auth.verify_password("nobody", "") is False
 
 
+class TestCalendarStatus:
+    @pytest.mark.asyncio
+    async def test_calendar_status_connected(self, auth_client):
+        with patch("main.get_service", return_value=MagicMock()):
+            resp = await auth_client.get("/api/calendar/status")
+            assert resp.status_code == 200
+            assert resp.json()["connected"] is True
+
+    @pytest.mark.asyncio
+    async def test_calendar_status_not_connected(self, auth_client):
+        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+            resp = await auth_client.get("/api/calendar/status")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["connected"] is False
+            assert "auth_url" in data
+
+    @pytest.mark.asyncio
+    async def test_calendar_status_unauthenticated(self, client):
+        resp = await client.get("/api/calendar/status")
+        assert resp.status_code == 401
+
+
+class TestCalendarMonth:
+    @pytest.mark.asyncio
+    async def test_calendar_month_success(self, auth_client):
+        with patch("main.get_service", return_value=MagicMock()):
+            with patch("main.get_month_events", return_value=[{"summary": "Test"}]):
+                resp = await auth_client.get("/api/calendar/month?year=2025&month=6")
+                assert resp.status_code == 200
+                assert len(resp.json()["events"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_calendar_month_not_auth(self, auth_client):
+        with patch("main.get_service", side_effect=NotAuthenticated("http://auth.url")):
+            resp = await auth_client.get("/api/calendar/month?year=2025&month=6")
+            assert resp.status_code == 200
+            assert resp.json()["auth_required"] is True
+
+    @pytest.mark.asyncio
+    async def test_calendar_month_unauthenticated(self, client):
+        resp = await client.get("/api/calendar/month?year=2025&month=6")
+        assert resp.status_code == 401
+
+
+class TestCalendarDisconnect:
+    @pytest.mark.asyncio
+    async def test_disconnect_calendar(self, auth_client):
+        with patch("main.disconnect_calendar", return_value={"disconnected": True}):
+            resp = await auth_client.delete("/api/calendar/disconnect")
+            assert resp.status_code == 200
+            assert resp.json()["disconnected"] is True
+
+    @pytest.mark.asyncio
+    async def test_disconnect_not_connected(self, auth_client):
+        with patch("main.disconnect_calendar", return_value={"error": "Calendar not connected"}):
+            resp = await auth_client.delete("/api/calendar/disconnect")
+            assert resp.status_code == 200
+            assert "error" in resp.json()
+
+    @pytest.mark.asyncio
+    async def test_disconnect_unauthenticated(self, client):
+        resp = await client.delete("/api/calendar/disconnect")
+        assert resp.status_code == 401
+
+
+class TestTimezones:
+    @pytest.mark.asyncio
+    async def test_get_timezones(self, auth_client):
+        resp = await auth_client.get("/api/timezones")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "timezones" in data
+        assert "UTC" in data["timezones"]
+
+    @pytest.mark.asyncio
+    async def test_timezones_unauthenticated(self, client):
+        resp = await client.get("/api/timezones")
+        assert resp.status_code == 401
+
+
+class TestSettingsUpdate:
+    @pytest.mark.asyncio
+    async def test_update_timezone(self, auth_client):
+        with patch("main.update_user_timezone", new_callable=AsyncMock):
+            resp = await auth_client.patch("/api/settings", json={"timezone": "UTC-5"})
+            assert resp.status_code == 200
+            assert resp.json()["updated"] is True
+
+    @pytest.mark.asyncio
+    async def test_update_timezone_persists(self, auth_client):
+        """Full round-trip: PATCH timezone -> GET settings -> verify persisted."""
+        resp = await auth_client.patch("/api/settings", json={"timezone": "UTC-3"})
+        assert resp.status_code == 200, f"PATCH failed: {resp.text}"
+        assert resp.json()["updated"] is True
+
+        settings_resp = await auth_client.get("/api/settings")
+        assert settings_resp.status_code == 200, f"GET settings failed: {settings_resp.text}"
+        data = settings_resp.json()
+        assert data["timezone"] == "UTC-3", f"Expected UTC-3, got {data['timezone']}"
+
+    @pytest.mark.asyncio
+    async def test_update_timezone_reflects_in_me(self, auth_client):
+        """After PATCH timezone, /api/auth/me should reflect the new value."""
+        resp = await auth_client.patch("/api/settings", json={"timezone": "UTC-4"})
+        assert resp.status_code == 200, f"PATCH failed: {resp.text}"
+
+        me_resp = await auth_client.get("/api/auth/me")
+        assert me_resp.status_code == 200, f"GET /me failed: {me_resp.text}"
+        me_data = me_resp.json()
+        assert me_data["timezone"] == "UTC-4", f"Expected UTC-4, got {me_data['timezone']}"
+
+    @pytest.mark.asyncio
+    async def test_update_invalid_timezone(self, auth_client):
+        resp = await auth_client.patch("/api/settings", json={"timezone": "Invalid/Zone"})
+        assert resp.status_code == 400
+        assert "Invalid timezone" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_settings_unauthenticated(self, client):
+        resp = await client.patch("/api/settings", json={"timezone": "UTC"})
+        assert resp.status_code == 401
+
+
+class TestMeWithTimezone:
+    @pytest.mark.asyncio
+    async def test_me_returns_timezone(self, auth_client):
+        resp = await auth_client.get("/api/auth/me")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "timezone" in data
+
+
 class TestCalendarWriteEndpoints:
     @pytest.mark.asyncio
     async def test_create_event_unauthenticated(self, client):
@@ -841,8 +974,10 @@ class TestConversationEndpoints:
                     assert len(messages_arg) == 3
                     assert messages_arg[0]["role"] == "system"
                     assert "Qwelio" in messages_arg[0]["content"]
-                    assert messages_arg[1]["content"] == "Previous"
-                    assert messages_arg[2]["content"] == "Current"
+                    assert messages_arg[1]["content"].startswith("[")
+                    assert "Previous" in messages_arg[1]["content"]
+                    assert messages_arg[2]["content"].startswith("[")
+                    assert "Current" in messages_arg[2]["content"]
 
     @pytest.mark.asyncio
     async def test_chat_system_prompt_contains_calendar_events(self, auth_client):

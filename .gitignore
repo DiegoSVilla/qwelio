@@ -37,3 +37,4 @@ Thumbs.db
 *.swp
 *.swo
 backend/conversations.db
+backend/qwelio.db

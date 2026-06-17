@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import os
 import secrets
 import hmac
@@ -14,13 +15,15 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal
 from datetime import datetime, date, timezone, timedelta
 
+_current_timezone: contextvars.ContextVar[str] = contextvars.ContextVar("current_timezone", default="UTC")
+
 from dotenv import load_dotenv
 
 from llm import chat_with_tools, LLMError
-from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, _fetch_events, NotAuthenticated
+from gcalendar import get_service, auth_flow, list_events, get_today_events, create_event, edit_event, delete_event, _fetch_events, NotAuthenticated, get_month_events, disconnect_calendar, TOKEN_PATH
 from auth import User, SESSION_KEY, _rate_limiter, get_current_user, verify_password
 from tools import ToolRegistry
-from storage import init_db, seed_default_users, save_turns, get_history, clear_history, cleanup_old_history, get_summaries
+from storage import init_db, seed_default_users, save_turns, get_history, clear_history, cleanup_old_history, get_summaries, get_user_timezone, update_user_timezone
 from storage import DB_PATH
 from prompt import build_system_prompt, DEFAULT_TIMEZONE
 from settings import settings
@@ -56,20 +59,13 @@ app.add_middleware(
 
 session_secret = os.getenv("SESSION_SECRET")
 if not session_secret:
-    import pathlib
-    secret_file = pathlib.Path(__file__).parent / ".session_secret"
-    if secret_file.exists():
-        session_secret = secret_file.read_text().strip()
-    else:
-        session_secret = secrets.token_hex(32)
-        secret_file.write_text(session_secret)
-        secret_file.chmod(0o600)
+    session_secret = secrets.token_hex(32)
 
 app.add_middleware(
     SessionMiddleware,
     secret_key=session_secret,
     https_only=os.getenv("HTTPS_ONLY", "false").lower() == "true",
-    max_age=86400,
+    max_age=3600,
 )
 
 
@@ -195,7 +191,7 @@ def _do_create(summary, start, end, location=None, description=None):
         service = get_service()
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
-    return create_event(service, req.summary, req.start, req.end, req.location, req.description)
+    return create_event(service, req.summary, req.start, req.end, req.location, req.description, user_tz=_current_timezone.get())
 
 
 def _do_edit(event_id, summary=None, start=None, end=None, location=None, description=None):
@@ -206,7 +202,7 @@ def _do_edit(event_id, summary=None, start=None, end=None, location=None, descri
         service = get_service()
     except NotAuthenticated:
         return {"error": "Calendar authentication expired. Please re-authorize."}
-    return edit_event(service, event_id, req.summary, req.start, req.end, req.location, req.description)
+    return edit_event(service, event_id, req.summary, req.start, req.end, req.location, req.description, user_tz=_current_timezone.get())
 
 
 def _do_delete(event_id):
@@ -294,8 +290,8 @@ def _register_tools():
             "type": "object",
             "properties": {
                 "summary": {"type": "string", "description": "Event title"},
-                "start": {"type": "string", "description": "Start time in ISO 8601 format"},
-                "end": {"type": "string", "description": "End time in ISO 8601 format"},
+                "start": {"type": "string", "description": "Start time in the user's local timezone. Use 'YYYY-MM-DD' for all-day events, or 'YYYY-MM-DDTHH:MM:SS' for timed events. Do NOT include a timezone offset (no Z, no +00:00, no -03:00)."},
+                "end": {"type": "string", "description": "End time in the user's local timezone. Use 'YYYY-MM-DD' for all-day events, or 'YYYY-MM-DDTHH:MM:SS' for timed events. Do NOT include a timezone offset."},
                 "location": {"type": "string", "description": "Event location (optional)"},
                 "description": {"type": "string", "description": "Event description (optional)"},
             },
@@ -312,8 +308,8 @@ def _register_tools():
             "properties": {
                 "event_id": {"type": "string", "description": "Event ID to update"},
                 "summary": {"type": "string", "description": "New event title (optional)"},
-                "start": {"type": "string", "description": "New start time in ISO 8601 (optional)"},
-                "end": {"type": "string", "description": "New end time in ISO 8601 (optional)"},
+                "start": {"type": "string", "description": "New start time in user's local timezone. 'YYYY-MM-DD' for all-day, 'YYYY-MM-DDTHH:MM:SS' for timed. Do NOT include a timezone offset."},
+                "end": {"type": "string", "description": "New end time in user's local timezone. 'YYYY-MM-DD' for all-day, 'YYYY-MM-DDTHH:MM:SS' for timed. Do NOT include a timezone offset."},
                 "location": {"type": "string", "description": "New location (optional)"},
                 "description": {"type": "string", "description": "New description (optional)"},
             },
@@ -378,72 +374,150 @@ def _register_tools():
         _do_filter,
     )
 
+    ToolRegistry.register(
+        "get_current_time",
+        "Get the current date and time in the user's timezone. Call this tool whenever the user asks about the current time or date, or when you need to verify the exact time before answering.",
+        {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        _do_get_time,
+    )
+
+
+def _do_get_time():
+    from prompt import _parse_tz_offset
+    tz = _current_timezone.get()
+    offset_hours = _parse_tz_offset(tz)
+    utc_now = datetime.now(timezone.utc)
+    local_now = utc_now + timedelta(hours=offset_hours)
+    month_names = ["January", "February", "March", "April", "May", "June",
+                   "July", "August", "September", "October", "November", "December"]
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    return {
+        "timezone": tz,
+        "utc": utc_now.strftime("%Y-%m-%d %H:%M:%S"),
+        "local_time": local_now.strftime("%H:%M:%S"),
+        "local_date": local_now.strftime("%Y-%m-%d"),
+        "day_of_week": day_names[local_now.weekday()],
+        "formatted": f"{day_names[local_now.weekday()]}, {month_names[local_now.month - 1]} {local_now.day}, {local_now.year} at {local_now.strftime('%I:%M %p')} {tz}",
+    }
+
 
 _register_tools()
 
 
 @app.post("/api/auth/login")
 async def api_login(request: Request, req: LoginRequest):
+    print(f"[QW-B020] api_login: attempt for user={req.username}")
     if _rate_limiter.is_limited(request):
+        print("[QW-B021] api_login: rate limited")
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
     if not await verify_password(req.username, req.password):
         _rate_limiter.record(request)
+        print("[QW-B022] api_login: invalid credentials")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     user = User(id=req.username, username=req.username)
     request.session[SESSION_KEY] = user.model_dump()
+    print(f"[QW-B023] api_login: success, user={user.id}")
     return {"user": user}
 
 
 @app.post("/api/auth/logout")
 async def api_logout(request: Request, user: User = Depends(get_current_user)):
+    print(f"[QW-B024] api_logout: user={user.id}")
     request.session.clear()
+    print("[QW-B025] api_logout: session cleared")
     return {"message": "Logged out"}
 
 
 @app.get("/api/auth/me")
 async def api_me(user: User = Depends(get_current_user)):
-    return {"user": user}
+    print(f"[QW-B026] api_me: user={user.id}")
+    tz = await get_user_timezone(user.id)
+    return {"user": user, "timezone": tz}
 
 
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest, user: User = Depends(get_current_user)):
+    print(f"[QW-B001] api_chat: start, user={user.id}, messages={len(req.messages)}")
     try:
+        print(f"[QW-B002] api_chat: fetching history (limit={settings.max_context_turns})")
         history = await get_history(user.id, limit=settings.max_context_turns)
         clean_history = [{k: v for k, v in h.items() if k != "turn_order"} for h in history]
+        print(f"[QW-B003] api_chat: history loaded, turns={len(clean_history)}")
 
         # Fetch calendar context (async-safe, graceful degradation)
         today_ev = []
         week_ev = []
         calendar_available = False
         try:
+            print("[QW-B004] api_chat: fetching calendar service")
             service = get_service()
+            print("[QW-B005] api_chat: fetching today events")
             today_ev = await asyncio.to_thread(get_today_events, service)
+            print(f"[QW-B006] api_chat: today events={len(today_ev)}")
+            print("[QW-B007] api_chat: fetching week events")
             week_ev = await asyncio.to_thread(list_events, service, days=7)
+            print(f"[QW-B008] api_chat: week events={len(week_ev)}")
             calendar_available = True
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[QW-B009] api_chat: calendar unavailable: {type(e).__name__}: {e}")
 
         # Build system prompt with time + calendar context
+        print("[QW-B010] api_chat: building system prompt")
+        user_tz = await get_user_timezone(user.id)
+        _current_timezone.set(user_tz)
         tool_defs = ToolRegistry.get_definitions()
+        now = datetime.now(timezone.utc)
         system_prompt = build_system_prompt(
-            current_time_utc=datetime.now(timezone.utc),
-            user_timezone=DEFAULT_TIMEZONE,
+            current_time_utc=now,
+            user_timezone=user_tz,
             today_events=today_ev,
             week_events=week_ev,
             tool_definitions=tool_defs,
             calendar_available=calendar_available,
         )
+        print(f"[QW-B011] api_chat: system prompt built, length={len(system_prompt)}")
 
-        messages = [{"role": "system", "content": system_prompt}] + clean_history + [m.model_dump() for m in req.messages]
+        # Timestamp user messages so the LLM knows when each message was sent
+        def _timestamp_user_msg(content: str, ts: datetime) -> str:
+            from prompt import _parse_tz_offset
+            offset_hours = _parse_tz_offset(user_tz)
+            local = ts + timedelta(hours=offset_hours)
+            return f"[{local.strftime('%H:%M:%S %b %d, %Y')} {user_tz}] {content}"
+
+        timestamped_history = []
+        for h in clean_history:
+            if h["role"] == "user":
+                ts = datetime.fromisoformat(h.get("timestamp", now.isoformat())) if h.get("timestamp") else now
+                timestamped_history.append({"role": "user", "content": _timestamp_user_msg(h["content"], ts)})
+            else:
+                timestamped_history.append(h)
+
+        new_messages = []
+        for m in req.messages:
+            if m.role == "user":
+                new_messages.append({"role": "user", "content": _timestamp_user_msg(m.content, now)})
+            else:
+                new_messages.append(m.model_dump())
+
+        messages = [{"role": "system", "content": system_prompt}] + timestamped_history + new_messages
+        print(f"[QW-B012] api_chat: sending {len(messages)} messages to LLM (system + {len(clean_history)} history + {len(req.messages)} new)")
         content, new_msgs = await chat_with_tools(messages, tool_defs)
+        print(f"[QW-B013] api_chat: LLM response received, content length={len(content) if content else 0}, new_msgs={len(new_msgs)}")
 
         turns = [(m.role, m.content, None, None) for m in req.messages]
         for msg in new_msgs:
             turns.append((msg["role"], msg.get("content"), msg.get("tool_calls"), msg.get("tool_call_id")))
+        print(f"[QW-B014] api_chat: saving {len(turns)} turns to history")
         await save_turns(user.id, turns)
+        print("[QW-B015] api_chat: turns saved, returning response")
 
         return {"content": content}
     except LLMError as e:
+        print(f"[QW-B016] api_chat: LLMError: {e}")
         return {"error": str(e)}
 
 
@@ -475,47 +549,78 @@ async def trigger_summarize(user: User = Depends(get_current_user)):
 
 @app.get("/api/calendar/auth")
 async def calendar_auth(request: Request, user: User = Depends(get_current_user)):
+    print(f"[QW-B036] calendar_auth: start, user={user.id}")
     try:
         get_service()
+        print("[QW-B037] calendar_auth: already authenticated")
         return {"error": "Already authenticated"}
     except NotAuthenticated as e:
+        print("[QW-B038] calendar_auth: not authenticated, generating OAuth state")
         state = secrets.token_urlsafe(32)
         request.session["oauth_state"] = state
-        return {"auth_url": e.auth_url, "oauth_state": state}
+        print(f"[QW-B039] calendar_auth: oauth_state stored={state[:8]}...")
+        try:
+            get_service(state=state)
+        except NotAuthenticated as e2:
+            request.session["oauth_code_verifier"] = e2.code_verifier
+            print(f"[QW-B040] calendar_auth: code_verifier stored={e2.code_verifier is not None}")
+            return {"auth_url": e2.auth_url, "oauth_state": state}
 
 
 @app.get("/api/calendar/callback")
 async def calendar_callback(request: Request, state: str = Query(...), user: User = Depends(get_current_user)):
+    print(f"[QW-B041] calendar_callback: start, user={user.id}")
     stored_state = request.session.get("oauth_state")
+    print(f"[QW-B042] calendar_callback: session keys={list(request.session.keys())}, stored_state={stored_state!r}, provided_state={state!r}")
     if not stored_state or not hmac.compare_digest(stored_state, state):
+        print("[QW-B043] calendar_callback: STATE MISMATCH")
         return HTMLResponse("<h1>Error</h1><p>Invalid or missing state parameter.</p>", status_code=400)
+    print("[QW-B044] calendar_callback: state valid, cleaning session")
     request.session.pop("oauth_state", None)
+    code_verifier = request.session.pop("oauth_code_verifier", None)
+    callback_url = os.getenv("GOOGLE_REDIRECT_URI") + "?" + str(request.url.query)
+    print(f"[QW-B045] calendar_callback: callback_url={callback_url}, code_verifier={code_verifier is not None}")
     try:
-        auth_flow(str(request.url))
+        auth_flow(callback_url, code_verifier)
+        print("[QW-B046] calendar_callback: auth_flow succeeded")
         return HTMLResponse(
-            "<h1>Success!</h1><p>Calendar authorized. You can close this window.</p>"
+            "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='2;url=/'>"
+            "<title>Success</title></head><body style='text-align:center;padding:60px;font-family:sans-serif'>"
+            "<h1>Success!</h1><p>Calendar connected. Redirecting...</p></body></html>"
         )
-    except Exception:
-        return HTMLResponse("<h1>Error</h1><p>Authorization failed. Try again.</p>", status_code=500)
+    except Exception as exc:
+        print(f"[QW-B047] calendar_callback: auth_flow FAILED: {type(exc).__name__}: {exc}")
+        return HTMLResponse(
+            "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='3;url=/'>"
+            "<title>Error</title></head><body style='text-align:center;padding:60px;font-family:sans-serif'>"
+            "<h1>Error</h1><p>Authorization failed. Redirecting to login...</p></body></html>",
+            status_code=500
+        )
 
 
 @app.get("/api/calendar/today")
 async def calendar_today(user: User = Depends(get_current_user)):
+    print(f"[QW-B030] calendar_today: start, user={user.id}")
     try:
         service = get_service()
         events = get_today_events(service)
+        print(f"[QW-B031] calendar_today: success, events={len(events)}")
         return {"events": events}
     except NotAuthenticated as e:
+        print("[QW-B032] calendar_today: NotAuthenticated")
         return {"auth_required": True, "auth_url": e.auth_url}
 
 
 @app.get("/api/calendar/week")
 async def calendar_week(user: User = Depends(get_current_user)):
+    print(f"[QW-B033] calendar_week: start, user={user.id}")
     try:
         service = get_service()
         events = list_events(service, days=7)
+        print(f"[QW-B034] calendar_week: success, events={len(events)}")
         return {"events": events}
     except NotAuthenticated as e:
+        print("[QW-B035] calendar_week: NotAuthenticated")
         return {"auth_required": True, "auth_url": e.auth_url}
 
 
@@ -585,8 +690,48 @@ async def filter_events(req: EventFilterRequest, user: User = Depends(get_curren
     return {"events": events}
 
 
+@app.get("/api/calendar/status")
+async def calendar_status(user: User = Depends(get_current_user)):
+    """Check if calendar is connected."""
+    try:
+        get_service()
+        return {"connected": True}
+    except NotAuthenticated as e:
+        return {"connected": False, "auth_url": e.auth_url}
+
+
+@app.get("/api/calendar/month")
+async def calendar_month(year: int = Query(...), month: int = Query(...), user: User = Depends(get_current_user)):
+    """Get events for a specific month."""
+    print(f"[QW-B050] calendar_month: year={year}, month={month}, user={user.id}")
+    try:
+        service = get_service()
+        events = get_month_events(service, year, month)
+        print(f"[QW-B051] calendar_month: success, events={len(events)}")
+        return {"events": events}
+    except NotAuthenticated as e:
+        print("[QW-B052] calendar_month: NotAuthenticated")
+        return {"auth_required": True, "auth_url": e.auth_url}
+
+
+@app.delete("/api/calendar/disconnect")
+async def calendar_disconnect(request: Request, user: User = Depends(get_current_user)):
+    """Disconnect Google Calendar by revoking token."""
+    result = disconnect_calendar()
+    request.session.pop("oauth_state", None)
+    request.session.pop("oauth_code_verifier", None)
+    return result
+
+
+@app.get("/api/timezones")
+async def get_timezones(user: User = Depends(get_current_user)):
+    offsets = [f"UTC{h:+d}" if h != 0 else "UTC" for h in range(-12, 13)]
+    return {"timezones": offsets}
+
+
 @app.get("/api/settings")
 async def get_settings(user: User = Depends(get_current_user)):
+    tz = await get_user_timezone(user.id)
     return {
         "model_name": settings.model_name,
         "temperature": settings.temperature,
@@ -594,4 +739,24 @@ async def get_settings(user: User = Depends(get_current_user)):
         "max_retries": settings.max_retries,
         "max_context_turns": settings.max_context_turns,
         "max_tool_iterations": settings.max_tool_iterations,
+        "timezone": tz,
     }
+
+
+class SettingsUpdateRequest(BaseModel):
+    timezone: str | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    timeout: float | None = Field(default=None, ge=1.0, le=300.0)
+    max_retries: int | None = Field(default=None, ge=0)
+    max_context_turns: int | None = Field(default=None, ge=1, le=100)
+    max_tool_iterations: int | None = Field(default=None, ge=1, le=20)
+
+
+@app.patch("/api/settings")
+async def update_settings(req: SettingsUpdateRequest, user: User = Depends(get_current_user)):
+    if req.timezone is not None:
+        import re
+        if not re.match(r"^UTC(-|\+)?\d{1,2}$", req.timezone):
+            raise HTTPException(status_code=400, detail=f"Invalid timezone: {req.timezone}")
+        await update_user_timezone(user.id, req.timezone)
+    return {"updated": True}
